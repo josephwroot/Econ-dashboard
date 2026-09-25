@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-09-25T15:16:41+00:00",
+ "generated_at": "2026-09-25T15:20:44+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -14,17 +14,16 @@
   "t10",
   "debt_gdp",
   "balance",
+  "gross_debt",
   "med_income",
   "weekly_earn",
+  "nim",
   "fb_share",
   "fb_lf",
   "outlays",
   "receipts"
  ],
  "stale": {},
- "failed": {
-  "gross_debt": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/debt_to_penny failed: HTTP 404: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <base href=\"/\">\n</head>\n<body>\n\n<h1>404 Error: The requested page could not be found</h1>\n<p>We are sorry, but the page you are looking for may not exist, m",
-  "nim": "RuntimeError: Census NST-EST national totals file not found for the 2020s"
- },
+ "failed": {},
  "notes": []
 }
