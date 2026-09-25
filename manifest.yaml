@@ -250,7 +250,7 @@ series:
     sid_override: NST-EST ALLDATA
     url: https://www.census.gov/data/datasets/time-series/demo/popest/2020s-national-total.html
     freq_label: Annual, years ending June 30
-    note: Revised substantially with each vintage. The 2010s come from the intercensal series and the 2020s from the latest vintage; 2020 sums the two partial periods.
+    note: Revised substantially with each vintage. Years through 2019 come from the Vintage 2019 estimates and 2021 onward from the latest vintage; 2020 is omitted because the two vintages split that year.
 
   - id: fb_share
     group: immigration

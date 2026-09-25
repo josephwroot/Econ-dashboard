@@ -263,12 +263,15 @@ def census_nim():
                     f'{base}/2010-2019/{folder}/totals/nst-est2019-alldata.csv']
     tried = []
 
+    modified = {}
+
     def load(cands):
         for u in cands:
             try:
                 r = S.get(u, timeout=90, headers={'Accept': 'text/csv,*/*'})
                 tried.append(f'{r.status_code} {u}')
                 if r.status_code == 200 and 'INTERNATIONALMIG' in r.text[:50000]:
+                    modified[u] = r.headers.get('Last-Modified')
                     return u, r.text
             except Exception as e:  # noqa: BLE001
                 tried.append(f'{type(e).__name__} {u}')
@@ -307,7 +310,17 @@ def census_nim():
     if not vals:
         raise RuntimeError('Census file parsed but no INTERNATIONALMIG columns found')
     obs = [(f'{yr}-01-01', vals[yr]) for yr in sorted(vals)]
-    return obs, {'source_url': u20, 'source_url_2010s': u10}
+    lm = modified.get(u20)
+    last_updated = None
+    if lm:
+        try:
+            last_updated = dt.datetime.strptime(lm, '%a, %d %b %Y %H:%M:%S %Z').date().isoformat()
+        except ValueError:
+            last_updated = None
+    vintage = re.search(r'EST(\d{4})', u20, re.I)
+    return obs, {'source_url': u20, 'source_url_2010s': u10, 'last_updated': last_updated,
+                 'release_name': f'Vintage {vintage.group(1)} population estimates' if vintage else 'Population estimates',
+                 'next_text': f'Vintage {TODAY_ET.year if TODAY_ET.month < 12 else TODAY_ET.year + 1} estimates, expected around the turn of the year'}
 
 
 # ---------------------------------------------------------------- sources
@@ -519,6 +532,8 @@ def main():
     for s in out_series:
         if s.get('daily'):
             s['next'] = 'Every business day'
+        elif (s.get('meta') or {}).get('next_text'):
+            s['next'] = s['meta']['next_text']
         elif 'h.15' in (s.get('release_name') or '').lower():
             s['next'] = 'Posted every business day; the monthly average settles after month end'
         elif s.get('release_id') in next_by_release:
