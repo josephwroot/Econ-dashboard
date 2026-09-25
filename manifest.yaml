@@ -58,6 +58,21 @@ series:
     freq_label: Quarterly, seasonally adjusted
     note: Computed here as the four-quarter change in the output-per-hour index.
 
+  - id: labor_share
+    group: output
+    title: Labor share of income
+    sub: Compensation of employees as a share of gross domestic income
+    kind: rate
+    freq: Q
+    fmt: pct1
+    axis: pct
+    source: {type: ratio, num: GDICOMP, den: [GDI], factor: 100}
+    src_label: BEA via FRED
+    sid_override: GDICOMP / GDI
+    url: https://fred.stlouisfed.org/series/GDICOMP
+    freq_label: Quarterly, seasonally adjusted annual rates
+    note: The remainder of gross domestic income goes to proprietors, corporate profits, interest, rents, production taxes, and depreciation; the income-by-type tile breaks it out. Gross domestic income arrives with the second GDP estimate, so this lags real GDP growth by a month.
+
   - id: unrate
     group: labor
     title: Unemployment rate
@@ -109,6 +124,24 @@ series:
     src_label: BLS via FRED
     freq_label: Monthly, seasonally adjusted
     note: First-differenced from the payroll level. The two most recent months are preliminary and get revised with each release. April 2020 dwarfs everything else; a range button trims it.
+
+  - id: lfpr_sex
+    group: labor
+    title: Participation rate by sex
+    sub: Share of the population aged 16 and over in the labor force
+    kind: multi
+    freq: M
+    fmt: pct1
+    axis: pct
+    source:
+      type: fred_multi
+      lines:
+        - {label: Men, series: LNS11300001}
+        - {label: Women, series: LNS11300002}
+    src_label: BLS via FRED
+    url: https://fred.stlouisfed.org/series/LNS11300002
+    freq_label: Monthly, seasonally adjusted
+    note: The two rates converged for fifty years and have moved roughly together since 2000. Prime-age versions by sex can be added as a companion tile.
 
   - id: cpi
     group: prices
@@ -316,6 +349,71 @@ comp:
       - {name: Customs duties, match: [Customs Duties]}
       - {name: Excise taxes, match: [Excise Taxes]}
       - {name: Everything else, residual: true}
+
+  - id: gdi_types
+    group: output
+    title: Income side of GDP, by type
+    sub: Gross domestic income by type of income, NIPA table 1.10
+    source: {type: fred_comp, total: GDI, freq: Q}
+    vfmt: usd_bn
+    modes: [share, usd]
+    src_label: BEA via FRED
+    sid_override: NIPA table 1.10
+    url: https://fred.stlouisfed.org/release/tables?rid=53&eid=17636
+    freq_label: Quarterly, seasonally adjusted annual rates
+    note: Compensation is labor income; corporate profits, net interest, rental income, and depreciation are returns to capital; proprietors' income mixes the two. Everything else is business transfer payments and the surplus of government enterprises. The latest quarter shown is the most recent with all components published; gross domestic income arrives a month after the advance GDP estimate.
+    cats:
+      - {name: Compensation of employees, series: [GDICOMP]}
+      - {name: Proprietors' income, series: [PROPINC]}
+      - {name: Corporate profits, series: [A445RC1Q027SBEA]}
+      - {name: Net interest, series: [W272RC1Q027SBEA]}
+      - {name: Rental income, series: [RENTIN]}
+      - {name: Taxes on production less subsidies, series: [GDITAXES, -GDISUBS]}
+      - {name: Depreciation, series: [COFC]}
+      - {name: Everything else, residual: true}
+
+  - id: payrolls_sector
+    group: labor
+    title: Payroll employment by sector
+    sub: Nonfarm payrolls by industry supersector
+    source: {type: fred_comp, total: PAYEMS, freq: M}
+    vfmt: jobs_k
+    modes: [level, share]
+    mode_labels: {level: Millions of jobs, share: Share of total}
+    src_label: BLS via FRED
+    sid_override: Current Employment Statistics supersectors
+    url: https://fred.stlouisfed.org/series/PAYEMS
+    freq_label: Monthly, seasonally adjusted
+    note: Establishment survey. Education and health services is the private-sector supersector; public schools and hospitals sit in government.
+    cats:
+      - {name: "Trade, transportation, and utilities", series: [USTPU]}
+      - {name: Education and health services, series: [USEHS]}
+      - {name: Government, series: [USGOVT]}
+      - {name: Professional and business services, series: [USPBS]}
+      - {name: Leisure and hospitality, series: [USLAH]}
+      - {name: Manufacturing, series: [MANEMP]}
+      - {name: Financial activities, series: [USFIRE]}
+      - {name: Construction, series: [USCONS]}
+      - {name: Other services, series: [USSERV]}
+      - {name: Information, series: [USINFO]}
+      - {name: Mining and logging, series: [USMINE]}
+
+  - id: lf_sex
+    group: labor
+    title: Labor force by sex
+    sub: Civilian labor force, ages 16 and over
+    source: {type: fred_comp, freq: M}
+    vfmt: persons_k
+    modes: [level, share]
+    mode_labels: {level: Millions of people, share: Share of total}
+    src_label: BLS via FRED
+    sid_override: LNS11000001 / LNS11000002
+    url: https://fred.stlouisfed.org/series/LNS11000002
+    freq_label: Monthly, seasonally adjusted
+    note: Household survey. Women's share of the labor force rose from about 30 percent in 1948 to roughly 47 percent by 2000 and has been flat since.
+    cats:
+      - {name: Men, series: [LNS11000001]}
+      - {name: Women, series: [LNS11000002]}
 
 # Releases always shown in the weekly strip when FRED lists them, beyond those tied to the series above.
 extra_releases:

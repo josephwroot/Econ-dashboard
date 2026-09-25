@@ -240,10 +240,68 @@ def build_comp(cfg, gdp_fy):
             hist[name].append(val)
     return {
         'snapshot': {'period': period, 'fy': fy, 'through_month': mon, 'total': cur_total,
-                     'prev_total': prev_total, 'cats': cur_cats, 'as_of': latest},
-        'hist': {'years': years, 'cats': [[n, hist[n]] for n in hist],
-                 'gdp': {str(y): gdp_fy.get(y) for y in years}},
+                     'prev_total': prev_total, 'prev_label': 'vs same months a year earlier',
+                     'cats': cur_cats, 'as_of': latest},
+        'hist': {'x': years, 'labels': [f'Fiscal {y}' for y in years], 'cats': [[n, hist[n]] for n in hist],
+                 'gdp': [gdp_fy.get(y) for y in years], 'title': f'Complete fiscal years since {years[0]}' if years else ''},
         'last_updated': latest,
+    }
+
+
+def build_fred_comp(cfg):
+    src = cfg['source']
+    freq = src.get('freq', 'Q')
+    per = per_year(freq)
+    series = {}
+    for c in cfg['cats']:
+        for sid in c.get('series', []):
+            key = sid.lstrip('-')
+            if key not in series:
+                series[key] = dict(fred_obs(key))
+    total_id = src.get('total')
+    if total_id:
+        series[total_id] = dict(fred_obs(total_id))
+    dates = None
+    for sid, m in series.items():
+        dates = set(m) if dates is None else dates & set(m)
+    dates = sorted(dates)
+    if not dates:
+        raise RuntimeError('no common dates across the component series')
+
+    def cats_at(d):
+        matched, cats = 0.0, []
+        for c in cfg['cats']:
+            if c.get('residual'):
+                continue
+            v = 0.0
+            for sid in c['series']:
+                sign = -1 if sid.startswith('-') else 1
+                v += sign * series[sid.lstrip('-')][d]
+            cats.append([c['name'], v])
+            matched += v
+        total = series[total_id][d] if total_id else matched
+        for c in cfg['cats']:
+            if c.get('residual'):
+                cats.append([c['name'], total - matched])
+        return cats, total
+
+    latest = dates[-1]
+    cur_cats, cur_total = cats_at(latest)
+    prev_total = cats_at(dates[-1 - per])[1] if len(dates) > per else None
+    hist = {c['name']: [] for c in cfg['cats']}
+    for d in dates:
+        cats, _ = cats_at(d)
+        for name, v in cats:
+            hist[name].append(v)
+    meta = fred_meta(total_id or cfg['cats'][0]['series'][0].lstrip('-'))
+    return {
+        'snapshot': {'period': period_label(latest, freq), 'total': cur_total, 'prev_total': prev_total,
+                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest},
+        'hist': {'x': [year_frac(d) for d in dates], 'labels': [period_label(d, freq) for d in dates],
+                 'cats': [[n, hist[n]] for n in hist], 'gdp': None,
+                 'title': f'Since {period_label(dates[0], freq)}'},
+        'last_updated': meta.get('last_updated'),
+        'release_id': meta.get('release_id'), 'release_name': meta.get('release_name'),
     }
 
 
@@ -351,10 +409,32 @@ def fetch_source(src, freq):
         return obs, {'last_updated': obs[-1][0] + ' 00:00:00-05', 'release_name': 'Debt to the Penny', 'daily': True}
     if t == 'census_nim':
         return census_nim()
+    if t == 'fred_multi':
+        lines = []
+        for ln in src['lines']:
+            obs = apply_transform(fred_obs(ln['series']), ln, freq)
+            lines.append({'label': ln['label'], 'series': ln['series'], 'obs': [[d, round(v, 6)] for d, v in sorted(obs)]})
+        meta = fred_meta(src['lines'][0]['series'])
+        meta['lines'] = lines
+        return lines[0]['obs'], meta
     raise ValueError(f'unknown source type {t}')
 
 
 # ---------------------------------------------------------------- helpers
+def period_label(d, freq, prefix=''):
+    y, m = int(d[:4]), int(d[5:7])
+    if freq == 'A':
+        return f'{prefix}{y}'
+    if freq == 'Q':
+        return f'Q{(m - 1) // 3 + 1} {y}'
+    return f'{MON[m - 1]} {y}'
+
+
+def year_frac(d):
+    y, m, dd = int(d[:4]), int(d[5:7]), int(d[8:10])
+    return y + (m - 1) / 12 + (dd - 1) / 365.25
+
+
 def fmt_date(s):
     if not s:
         return None
@@ -418,12 +498,16 @@ def main():
         sid = cfg['id']
         entry = {k: v for k, v in cfg.items() if k != 'source'}
         entry['sid'] = cfg.get('sid_override') or (cfg['source'].get('series') if cfg['source']['type'] == 'fred' else '')
+        if not entry['sid'] and cfg['source']['type'] == 'fred_multi':
+            entry['sid'] = ' / '.join(ln['series'] for ln in cfg['source']['lines'])
         if not entry.get('url'):
             entry['url'] = f'https://fred.stlouisfed.org/series/{entry["sid"]}' if entry['sid'] else ''
         try:
             obs, meta = fetch_source(cfg['source'], cfg['freq'])
             obs = sorted(obs)
             entry['obs'] = [[d, round(v, 6)] for d, v in obs]
+            if meta.get('lines'):
+                entry['lines'] = meta.pop('lines')
             entry['meta'] = meta
             entry['updated'] = fmt_date(meta.get('last_updated'))
             entry['updated_raw'] = meta.get('last_updated')
@@ -436,15 +520,22 @@ def main():
             log(f'ok    {sid:14s} {len(obs):5d} obs, last {obs[-1][0]} = {obs[-1][1]:.4g}')
             with open(os.path.join(CSVDIR, f'{sid}.csv'), 'w', newline='') as f:
                 w = csv.writer(f)
-                w.writerow(['date', 'value'])
-                w.writerows(obs)
+                if entry.get('lines'):
+                    lines = entry['lines']
+                    w.writerow(['date'] + [ln['label'] for ln in lines])
+                    maps = [dict(ln['obs']) for ln in lines]
+                    for d in sorted(set().union(*[set(m) for m in maps])):
+                        w.writerow([d] + [m.get(d, '') for m in maps])
+                else:
+                    w.writerow(['date', 'value'])
+                    w.writerows(obs)
         except Exception as e:  # noqa: BLE001
             err = f'{type(e).__name__}: {e}'
             log(f'FAIL  {sid:14s} {err}')
             traceback.print_exc()
             old = prev_series.get(sid)
             if old and old.get('obs'):
-                entry.update({k: old.get(k) for k in ('obs', 'meta', 'updated', 'updated_raw', 'release_id', 'release_name', 'daily')})
+                entry.update({k: old.get(k) for k in ('obs', 'lines', 'meta', 'updated', 'updated_raw', 'release_id', 'release_name', 'daily') if k in old})
                 entry['stale'] = True
                 entry['error'] = err
                 entry['stale_since'] = old.get('stale_since') or fmt_date(TODAY_ET.isoformat())
@@ -467,25 +558,30 @@ def main():
         cid = cfg['id']
         entry = {k: v for k, v in cfg.items()}
         entry['kind'] = 'comp'
+        entry['sid'] = cfg.get('sid_override', '')
         try:
-            entry.update(build_comp(cfg, gdp_fy))
+            if cfg.get('source', {}).get('type') == 'fred_comp':
+                entry.update(build_fred_comp(cfg))
+            else:
+                entry.update(build_comp(cfg, gdp_fy))
             entry['updated'] = fmt_date(entry['last_updated'])
             entry['stale'] = False
             entry['error'] = None
             status['ok'].append(cid)
-            log(f'ok    {cid:14s} snapshot {entry["snapshot"]["period"]}, total {entry["snapshot"]["total"]:.1f}B, hist {entry["hist"]["years"]}')
-            with open(os.path.join(CSVDIR, f'{cid}_by_fiscal_year.csv'), 'w', newline='') as f:
+            hx = entry['hist']
+            log(f'ok    {cid:14s} snapshot {entry["snapshot"]["period"]}, total {entry["snapshot"]["total"]:.1f}, hist {len(hx["x"])} points {hx["labels"][0] if hx["labels"] else ""} to {hx["labels"][-1] if hx["labels"] else ""}')
+            with open(os.path.join(CSVDIR, f'{cid}_by_category.csv'), 'w', newline='') as f:
                 w = csv.writer(f)
-                w.writerow(['fiscal_year'] + [n for n, _ in entry['hist']['cats']] + ['gdp_billions'])
-                for i, y in enumerate(entry['hist']['years']):
-                    w.writerow([y] + [round(vals[i], 3) for _, vals in entry['hist']['cats']] + [entry['hist']['gdp'].get(str(y))])
+                w.writerow(['period'] + [n for n, _ in hx['cats']] + (['gdp_billions'] if hx.get('gdp') else []))
+                for i, lab in enumerate(hx['labels']):
+                    w.writerow([lab] + [round(vals[i], 3) for _, vals in hx['cats']] + ([hx['gdp'][i]] if hx.get('gdp') else []))
         except Exception as e:  # noqa: BLE001
             err = f'{type(e).__name__}: {e}'
             log(f'FAIL  {cid:14s} {err}')
             traceback.print_exc()
             old = prev_comp.get(cid)
             if old and old.get('snapshot'):
-                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated')})
+                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name') if k in old})
                 entry['stale'] = True
                 entry['error'] = err
                 entry['stale_since'] = old.get('stale_since') or fmt_date(TODAY_ET.isoformat())
@@ -541,7 +637,12 @@ def main():
         else:
             s['next'] = s.get('next') or ''
     for c in out_comp:
-        c['next'] = 'Around the 8th business day of each month'
+        if c.get('release_id') in next_by_release:
+            c['next'] = fmt_date(next_by_release[c['release_id']])
+        elif c.get('source', {}).get('type') == 'fred_comp':
+            c['next'] = c.get('next') or ''
+        else:
+            c['next'] = 'Around the 8th business day of each month'
 
     now_et = NOW.astimezone(ET)
     dash = {
