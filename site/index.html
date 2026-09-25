@@ -43,7 +43,11 @@ a{color:inherit}
 .masthead{padding:32px 0 8px}
 .mast-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
 h1{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.15;margin:0;letter-spacing:-0.01em}
-.mast-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.mast-meta{display:flex;align-items:center;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.nav{display:flex;gap:14px;font-size:14px}
+.nav a{text-decoration:none}
+.nav a:hover{text-decoration:underline}
+.nav .here{color:var(--ink);font-weight:500}
 .brief{font-family:var(--serif);font-size:19px;line-height:1.55;max-width:66ch;margin:18px 0 0}
 .loading{color:var(--muted);padding:40px 0}
 .problem{margin:16px 0 0;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13.5px;max-width:80ch}
@@ -155,7 +159,7 @@ footer p{margin:0 0 8px}
   <header class="masthead">
     <div class="mast-row">
       <h1 id="title">US economy at a glance</h1>
-      <div class="mast-meta"><span id="checked"></span></div>
+      <div class="mast-meta"><nav class="nav"><span class="here">Dashboard</span><a href="debt.html">Debt dynamics</a></nav><span id="checked"></span></div>
     </div>
     <p class="brief" id="brief"></p>
     <div id="problem"></div>

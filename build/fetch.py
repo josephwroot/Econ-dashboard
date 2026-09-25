@@ -471,6 +471,64 @@ def gdp_by_fiscal_year(gdp_obs_trillions):
     return out
 
 
+def debt_dynamics(out_series, out_comp, gdp_fy):
+    """Starting values for the debt-dynamics page, all in percent."""
+    by = {x['id']: x for x in out_series if x.get('obs')}
+    comp = {x['id']: x for x in out_comp if x.get('hist')}
+    dd = {}
+    d = by.get('debt_gdp')
+    if d:
+        dd['debt'] = d['obs'][-1][1]
+        dd['debt_date'] = d['obs'][-1][0]
+    b = by.get('balance')
+    if b:
+        dd['fy'] = int(b['obs'][-1][0][:4])
+        dd['total_deficit'] = -b['obs'][-1][1]
+    o = comp.get('outlays')
+    if o and dd.get('fy'):
+        hx = o['hist']
+        try:
+            idx = hx['x'].index(dd['fy'])
+            ni = dict((n, v) for n, v in hx['cats']).get('Net interest')
+            gdp = hx['gdp'][idx] if hx.get('gdp') else None
+            if ni and gdp:
+                dd['interest_bn'] = ni[idx]
+                dd['interest'] = ni[idx] / gdp * 100
+                dd['gdp_fy_bn'] = gdp
+        except ValueError:
+            pass
+    if 'interest' in dd and 'total_deficit' in dd:
+        dd['primary_deficit'] = dd['total_deficit'] - dd['interest']
+    # effective interest rate on debt held by the public in that fiscal year
+    if d and dd.get('interest_bn') and by.get('gdp_nominal'):
+        fy = dd['fy']
+        gq = dict(by['gdp_nominal']['obs'])
+        dq = dict(d['obs'])
+        keys = [f'{fy - 1}-10-01', f'{fy}-01-01', f'{fy}-04-01', f'{fy}-07-01']
+        debts = [dq[k] / 100 * gq[k] * 1000 for k in keys if k in dq and k in gq]
+        if debts:
+            dd['effective_rate'] = dd['interest_bn'] / (sum(debts) / len(debts)) * 100
+    t = by.get('t10')
+    if t:
+        dd['t10'] = t['obs'][-1][1]
+    g = by.get('gdp_growth')
+    if g and len(g['obs']) >= 4:
+        prod = 1.0
+        for _, v in g['obs'][-4:]:
+            prod *= (1 + v / 100) ** 0.25
+        dd['real_growth'] = (prod - 1) * 100
+        dd['real_growth_through'] = g['obs'][-1][0]
+    n = by.get('gdp_nominal')
+    if n and len(n['obs']) >= 5:
+        dd['nominal_growth'] = (n['obs'][-1][1] / n['obs'][-5][1] - 1) * 100
+        if 'real_growth' in dd:
+            dd['gdp_inflation'] = ((1 + dd['nominal_growth'] / 100) / (1 + dd['real_growth'] / 100) - 1) * 100
+    c = by.get('cpi')
+    if c:
+        dd['cpi'] = c['obs'][-1][1]
+    return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in dd.items()}
+
+
 def load_previous():
     p = os.path.join(DATA, 'dashboard.json')
     if os.path.exists(p):
@@ -644,6 +702,12 @@ def main():
         else:
             c['next'] = 'Around the 8th business day of each month'
 
+    try:
+        dd = debt_dynamics(out_series, out_comp, gdp_fy)
+    except Exception as e:  # noqa: BLE001
+        dd = prev.get('debt_dynamics', {})
+        status['notes'].append(f'debt dynamics: {e}')
+
     now_et = NOW.astimezone(ET)
     dash = {
         'title': man.get('title', 'Economic dashboard'),
@@ -654,6 +718,7 @@ def main():
         'comp': out_comp,
         'recessions': rec,
         'releases': releases_week,
+        'debt_dynamics': dd,
         'week_start': (TODAY_ET - dt.timedelta(days=TODAY_ET.weekday())).isoformat(),
         'today': TODAY_ET.isoformat(),
         'status': {'ok': len(status['ok']), 'stale': list(status['stale']), 'failed': list(status['failed'])},
