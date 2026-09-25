@@ -94,6 +94,7 @@ h1{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.15;marg
 .bars.big .bt{height:14px}
 .bars .sh{color:var(--muted)}
 .mini svg{display:block;width:100%;height:auto}
+.mini-cap{font-size:12px;color:var(--faint);margin:0 0 4px}
 
 footer{margin:44px 0 40px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;max-width:80ch}
 footer p{margin:0 0 8px}
@@ -312,8 +313,7 @@ function miniStackedSVG(c){
   }
   g+='<line x1="0" x2="'+W+'" y1="'+(PB+0.5)+'" y2="'+(PB+0.5)+'" stroke="var(--border)" stroke-width="1"/>';
   yearTicks(t0,t1).forEach(function(y){var x=X(y);var anchor=x<14?'start':x>W-14?'end':'middle';g+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" font-size="10.5" fill="var(--faint)" text-anchor="'+anchor+'">'+y+'</text>';});
-  g+='<text x="'+(p+2)+'" y="11" font-size="10.5" fill="var(--faint)">'+(mode==='gdp'?'% of GDP':'$ billions')+', complete fiscal years</text>';
-  return '<svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+g+'</svg>';
+  return '<div class="mini-cap">Complete fiscal years, '+(mode==='gdp'?'% of GDP':'$ billions')+'</div><svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+g+'</svg>';
 }
 function bn(v){return v>=1000?'$'+(v/1000).toFixed(2)+'T':'$'+Math.round(v)+'B';}
 function barsHTML(c,big){
@@ -521,7 +521,7 @@ function openModal(s,btn){
   var meta='<dt>Source</dt><dd>'+esc(s.src_label)+(s.sid?', <a href="'+esc(s.url)+'" target="_blank" rel="noopener">'+esc(s.sid)+'</a>':(s.url?' (<a href="'+esc(s.url)+'" target="_blank" rel="noopener">dataset</a>)':''))+'</dd>'+
            '<dt>Frequency</dt><dd>'+esc(s.freq_label||'')+'</dd>'+
            '<dt>Last updated</dt><dd>'+esc(s.updated||'unknown')+(s.stale?' <span class="stale">(source unavailable since '+esc(s.stale_since||'today')+')</span>':'')+'</dd>'+
-           '<dt>Next release</dt><dd>'+esc(s.next||'not listed')+'</dd>';
+           '<dt>Next release</dt><dd>'+esc(s.next||'Not scheduled within the next ten weeks')+'</dd>';
   q('#m-meta').innerHTML=meta;
   q('#m-note').textContent=s.note||'';q('#m-note').style.display=s.note?'':'none';
   q('#m-err').textContent=s.error?'Last fetch error: '+s.error:'';q('#m-err').style.display=s.error?'':'none';

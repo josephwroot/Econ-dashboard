@@ -150,7 +150,7 @@ def fiscaldata_all(endpoint, fields=None, filt=None, sort=None):
 
 
 def debt_to_penny():
-    rows = fiscaldata_all('/v1/accounting/od/debt_to_penny', fields='record_date,tot_pub_debt_out_amt', sort='record_date')
+    rows = fiscaldata_all('/v2/accounting/od/debt_to_penny', fields='record_date,tot_pub_debt_out_amt', sort='record_date')
     obs = [(r['record_date'], float(r['tot_pub_debt_out_amt'])) for r in rows
            if r.get('tot_pub_debt_out_amt') not in (None, 'null', '')]
     if not obs:
@@ -253,20 +253,25 @@ def census_nim():
     y = TODAY_ET.year
     cands20 = []
     for v in range(y, 2020, -1):
-        cands20 += [f'{base}/2020-{v}/national/totals/NST-EST{v}-ALLDATA.csv',
-                    f'{base}/2020-{v}/national/totals/nst-est{v}-alldata.csv']
-    cands10 = [f'{base}/2010-2020/national/totals/nst-est2020int-alldata.csv',
-               f'{base}/2010-2020/national/totals/NST-EST2020INT-ALLDATA.csv',
-               f'{base}/2010-2019/national/totals/nst-est2019-alldata.csv']
+        for folder in ('state', 'national'):
+            cands20 += [f'{base}/2020-{v}/{folder}/totals/NST-EST{v}-ALLDATA.csv',
+                        f'{base}/2020-{v}/{folder}/totals/nst-est{v}-alldata.csv']
+    cands10 = []
+    for folder in ('state', 'national'):
+        cands10 += [f'{base}/2010-2020/{folder}/totals/nst-est2020int-alldata.csv',
+                    f'{base}/2010-2020/{folder}/totals/NST-EST2020INT-ALLDATA.csv',
+                    f'{base}/2010-2019/{folder}/totals/nst-est2019-alldata.csv']
+    tried = []
 
     def load(cands):
         for u in cands:
             try:
-                r = S.get(u, timeout=90)
-                if r.status_code == 200 and 'INTERNATIONALMIG' in r.text[:20000]:
+                r = S.get(u, timeout=90, headers={'Accept': 'text/csv,*/*'})
+                tried.append(f'{r.status_code} {u}')
+                if r.status_code == 200 and 'INTERNATIONALMIG' in r.text[:50000]:
                     return u, r.text
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                tried.append(f'{type(e).__name__} {u}')
         return None, None
 
     def us_row(text):
@@ -285,7 +290,7 @@ def census_nim():
 
     u20, t20 = load(cands20)
     if not t20:
-        raise RuntimeError('Census NST-EST national totals file not found for the 2020s')
+        raise RuntimeError('Census NST-EST totals file not found for the 2020s; tried: ' + '; '.join(tried))
     u10, t10 = load(cands10)
     vals = {}
     part_a = None
@@ -514,6 +519,8 @@ def main():
     for s in out_series:
         if s.get('daily'):
             s['next'] = 'Every business day'
+        elif 'h.15' in (s.get('release_name') or '').lower():
+            s['next'] = 'Posted every business day; the monthly average settles after month end'
         elif s.get('release_id') in next_by_release:
             s['next'] = fmt_date(next_by_release[s['release_id']])
         else:
