@@ -1,0 +1,327 @@
+# One entry per indicator. Add a new tile by adding an entry here; the daily job does the rest.
+#
+# kind:  rate   -> a percentage or share; comparisons are in percentage points
+#        growth -> already a growth rate; comparisons in points
+#        level  -> a dollar or index level; comparisons in percent
+#        flow   -> a change or count; comparisons are differences
+# freq:  M | Q | A   (D is handled as month-end points with an exact-date label)
+# fmt / axis: names of formatters defined in site/index.html
+# source.type: fred | ratio | splice | fiscaldata_dtp | census_nim
+
+title: US economy at a glance
+
+groups:
+  - {id: output,      title: Output,             desc: "Growth, size, and productivity"}
+  - {id: labor,       title: Labor,              desc: "Jobs and participation"}
+  - {id: prices,      title: "Prices and rates", desc: "Inflation and the cost of money"}
+  - {id: fiscal,      title: Fiscal,             desc: "Debt, deficits, and where the money goes"}
+  - {id: household,   title: Household,          desc: "How the median household is doing"}
+  - {id: immigration, title: Immigration,        desc: "Flows and the foreign-born workforce"}
+
+series:
+  - id: gdp_growth
+    group: output
+    title: Real GDP growth
+    sub: Annualized change from the prior quarter
+    kind: growth
+    freq: Q
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: A191RL1Q225SBEA}
+    src_label: BEA via FRED
+    freq_label: Quarterly, seasonally adjusted annual rate
+    note: Chained 2017 dollars. Each quarter is revised twice after the advance estimate; the third estimate arrives about three months after the quarter ends.
+
+  - id: gdp_nominal
+    group: output
+    title: Nominal GDP
+    sub: Current dollars, seasonally adjusted annual rate
+    kind: level
+    freq: Q
+    fmt: usdT
+    axis: usdT
+    source: {type: fred, series: GDP, transform: scale, factor: 0.001}
+    src_label: BEA via FRED
+    freq_label: Quarterly, seasonally adjusted annual rate
+    note: The level series is the denominator for the debt and deficit ratios below. Use the log scale to read growth rates off the slope.
+
+  - id: productivity
+    group: output
+    title: Labor productivity growth
+    sub: Nonfarm business output per hour, change from a year earlier
+    kind: growth
+    freq: Q
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: OPHNFB, transform: yoy_pct}
+    src_label: BLS via FRED
+    freq_label: Quarterly, seasonally adjusted
+    note: Computed here as the four-quarter change in the output-per-hour index.
+
+  - id: unrate
+    group: labor
+    title: Unemployment rate
+    sub: Civilian labor force, ages 16 and over
+    kind: rate
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: UNRATE}
+    src_label: BLS via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: From the household survey. The broader U-6 measure, which adds discouraged and involuntary part-time workers, can be added as a companion tile.
+
+  - id: lfpr
+    group: labor
+    title: Labor force participation
+    sub: Share of the population aged 16 and over in the labor force
+    kind: rate
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: CIVPART}
+    src_label: BLS via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: The long decline since 2000 is mostly aging; the prime-age rate next door strips that out.
+
+  - id: prime_epop
+    group: labor
+    title: Prime-age employment rate
+    sub: Employed share of the population aged 25 to 54
+    kind: rate
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: LNS12300060}
+    src_label: BLS via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: ""
+
+  - id: payrolls
+    group: labor
+    title: Payroll employment, monthly change
+    sub: Total nonfarm, thousands of jobs
+    kind: flow
+    freq: M
+    fmt: jobs
+    axis: jobs
+    source: {type: fred, series: PAYEMS, transform: diff}
+    src_label: BLS via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: First-differenced from the payroll level. The two most recent months are preliminary and get revised with each release. April 2020 dwarfs everything else; a range button trims it.
+
+  - id: cpi
+    group: prices
+    title: Consumer price inflation
+    sub: CPI, all items, change from a year earlier
+    kind: growth
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: CPIAUCSL, transform: yoy_pct}
+    src_label: BLS via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: Twelve-month change in the index. Core CPI and the median CPI are easy companions.
+
+  - id: core_pce
+    group: prices
+    title: Core PCE inflation
+    sub: Personal consumption expenditures excluding food and energy, change from a year earlier
+    kind: growth
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: fred, series: PCEPILFE, transform: yoy_pct}
+    src_label: BEA via FRED
+    freq_label: Monthly, seasonally adjusted
+    note: The Federal Reserve's preferred gauge against its 2 percent objective.
+
+  - id: fedfunds
+    group: prices
+    title: Federal funds rate
+    sub: Effective rate, monthly average
+    kind: rate
+    freq: M
+    fmt: pct2
+    axis: pct
+    dec: 2
+    source: {type: fred, series: FEDFUNDS}
+    src_label: Federal Reserve via FRED
+    freq_label: Monthly average of daily rates
+    note: ""
+
+  - id: t10
+    group: prices
+    title: 10-year Treasury yield
+    sub: Constant maturity, monthly average
+    kind: rate
+    freq: M
+    fmt: pct2
+    axis: pct
+    dec: 2
+    source: {type: fred, series: GS10}
+    src_label: Federal Reserve via FRED
+    freq_label: Monthly average of daily yields
+    note: The daily series is available too; a 10-year minus 2-year spread tile is a natural addition.
+
+  - id: debt_gdp
+    group: fiscal
+    title: Debt held by the public
+    sub: Share of GDP
+    kind: rate
+    freq: Q
+    fmt: pct0
+    axis: pct
+    source: {type: fred, series: FYGFGDQ188S}
+    src_label: Treasury and BEA via FRED
+    freq_label: Quarterly
+    note: Excludes debt held in government accounts such as the Social Security trust funds. Gross debt is the tile next door.
+
+  - id: balance
+    group: fiscal
+    title: Federal budget balance
+    sub: Surplus or deficit as a share of GDP, by fiscal year
+    kind: rate
+    freq: A
+    fmt: signed_pct1
+    axis: pct
+    period_prefix: "Fiscal "
+    source: {type: fred, series: FYFSGDA188S}
+    src_label: OMB via FRED
+    freq_label: Annual, fiscal years ending September 30
+    note: The monthly Treasury statements give a running fiscal-year-to-date figure between annual updates.
+
+  - id: gross_debt
+    group: fiscal
+    title: Total public debt
+    sub: Debt to the penny, latest business day
+    kind: level
+    freq: M
+    date_label: day
+    fmt: usdT
+    axis: usdT
+    source:
+      type: splice
+      parts:
+        - {type: fred, series: GFDEBTN, transform: scale, factor: 0.000001}
+        - {type: fiscaldata_dtp, transform: month_end, factor: 0.000000000001}
+    src_label: Treasury FiscalData, with FRED before 1993
+    sid_override: Debt to the Penny
+    url: https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/
+    freq_label: Daily since April 1993, shown at month ends; quarterly before that
+    note: Gross debt, including intragovernmental holdings.
+
+  - id: med_income
+    group: household
+    title: Real median family income
+    sub: Inflation-adjusted dollars, calendar year
+    kind: level
+    freq: A
+    fmt: usd0
+    axis: usdK
+    source: {type: fred, series: MEFAINUSA672N}
+    src_label: Census via FRED
+    freq_label: Annual
+    note: Published once a year in September from the Current Population Survey, covering the previous calendar year. The weekly earnings tile moves quarterly in between.
+
+  - id: weekly_earn
+    group: household
+    title: Real median weekly earnings
+    sub: Full-time wage and salary workers, 1982 to 1984 dollars
+    kind: level
+    freq: Q
+    fmt: usd0
+    axis: usd0
+    source: {type: fred, series: LES1252881600Q}
+    src_label: BLS via FRED
+    freq_label: Quarterly, seasonally adjusted
+    note: The 2020 jump is composition; low-wage workers left employment faster than others.
+
+  - id: nim
+    group: immigration
+    title: Net international migration
+    sub: Census population estimates, year ending June 30
+    kind: flow
+    freq: A
+    fmt: millions
+    axis: millions
+    source: {type: census_nim}
+    src_label: Census Bureau population estimates
+    sid_override: NST-EST ALLDATA
+    url: https://www.census.gov/data/datasets/time-series/demo/popest/2020s-national-total.html
+    freq_label: Annual, years ending June 30
+    note: Revised substantially with each vintage. The 2010s come from the intercensal series and the 2020s from the latest vintage; 2020 sums the two partial periods.
+
+  - id: fb_share
+    group: immigration
+    title: Foreign-born share of the labor force
+    sub: Current Population Survey, not seasonally adjusted
+    kind: rate
+    freq: M
+    fmt: pct1
+    axis: pct
+    source: {type: ratio, num: LNU01073395, den: [LNU01073395, LNU01073413], factor: 100}
+    src_label: BLS via FRED
+    sid_override: LNU01073395 / LNU01073413
+    url: https://fred.stlouisfed.org/series/LNU01073395
+    freq_label: Monthly, not seasonally adjusted
+    note: Foreign-born labor force divided by foreign-born plus native-born labor force. Monthly CPS immigration data are noisy; a 12-month average is an option.
+
+  - id: fb_lf
+    group: immigration
+    title: Foreign-born labor force
+    sub: Civilian labor force, ages 16 and over
+    kind: level
+    freq: M
+    fmt: millions_k
+    axis: millions_k
+    source: {type: fred, series: LNU01073395}
+    src_label: BLS via FRED
+    freq_label: Monthly, not seasonally adjusted
+    note: Compare with the year-ago value rather than the prior month; the series is not seasonally adjusted.
+
+comp:
+  - id: outlays
+    group: fiscal
+    title: Federal spending by category
+    sub: Outlays by budget function
+    marker: National Defense
+    src_label: Treasury, Monthly Treasury Statement
+    url: https://fiscaldata.treasury.gov/datasets/monthly-treasury-statement/
+    freq_label: Monthly, accumulated over the fiscal year (October to September)
+    note: The snapshot is the current fiscal year to date and compares with the same months a year earlier; once the September statement posts in mid-October it covers the full year. The history uses complete fiscal years, which on FiscalData begin with 2016. Medicare is shown gross of premiums; Medicaid sits inside Health.
+    cats:
+      - {name: Social Security, match: [Social Security]}
+      - {name: Medicare, match: [Medicare]}
+      - {name: Health (mostly Medicaid), match: [Health]}
+      - {name: Income security, match: [Income Security]}
+      - {name: Defense, match: [National Defense]}
+      - {name: Net interest, match: [Net Interest]}
+      - {name: Veterans, match: [Veterans Benefits and Services]}
+      - {name: Everything else, residual: true}
+
+  - id: receipts
+    group: fiscal
+    title: Federal revenue by source
+    sub: Receipts by source
+    marker: Individual Income Taxes
+    src_label: Treasury, Monthly Treasury Statement
+    url: https://fiscaldata.treasury.gov/datasets/monthly-treasury-statement/
+    freq_label: Monthly, accumulated over the fiscal year (October to September)
+    note: The snapshot is the current fiscal year to date and compares with the same months a year earlier. Payroll taxes combine employment and general retirement, unemployment insurance, and other retirement receipts.
+    cats:
+      - {name: Individual income taxes, match: [Individual Income Taxes]}
+      - {name: Payroll taxes, match: [Employment and General Retirement, Unemployment Insurance, Other Retirement]}
+      - {name: Corporate income taxes, match: [Corporation Income Taxes]}
+      - {name: Customs duties, match: [Customs Duties]}
+      - {name: Excise taxes, match: [Excise Taxes]}
+      - {name: Everything else, residual: true}
+
+# Releases always shown in the weekly strip when FRED lists them, beyond those tied to the series above.
+extra_releases:
+  - Job Openings and Labor Turnover Survey
+  - Advance Monthly Sales for Retail and Food Services
+  - Unemployment Insurance Weekly Claims Report
+  - Producer Price Index
+  - Employment Cost Index
+  - Productivity and Costs
