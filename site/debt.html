@@ -93,6 +93,12 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--line)}
 @media (max-width:560px){.starts{grid-template-columns:1fr;gap:1px 0}.starts dt{margin-top:7px}}
 .starts-h{font-family:var(--serif);font-weight:500;font-size:17px;margin:18px 0 8px;padding-top:14px;border-top:1px solid var(--border)}
 .panel-note{margin:0 0 10px;color:var(--muted);font-size:13px;line-height:1.4}
+.rates{display:grid;grid-template-columns:1fr auto auto;gap:2px 10px;font-size:12.5px;margin:2px 0 12px;align-items:baseline}
+.rates .rb{color:var(--muted)}
+.rates .rn{text-align:right;color:var(--faint)}
+.rates .rv{text-align:right;font-weight:500}
+.rates .rv.chg{color:var(--line2)}
+.rates .hd{color:var(--faint);font-size:11.5px;text-align:right}
 .panel .starts{font-size:13px;grid-template-columns:1fr;gap:1px 0}
 .panel .starts dt{margin-top:6px}
 .taxchart{touch-action:none}
@@ -154,8 +160,13 @@ footer{margin:40px 0 40px;padding-top:16px;border-top:1px solid var(--border);co
       <button class="btn" id="reset" type="button">Reset to current values</button>
       <div id="taxsec" hidden>
         <h2 class="starts-h">Tax schedule for <span id="tax-year"></span></h2>
-        <p class="panel-note">Change the rates here, or grab the dashed curve at right and drag it. The revenue change feeds the primary deficit above.</p>
-        <div id="tax-sliders"></div>
+        <p class="panel-note">Shift every marginal rate at once with the slider, or grab the dashed curve at right and drag it to change one bracket at a time. The revenue change feeds the primary deficit above.</p>
+        <div class="ctl">
+          <div class="ctl-row"><span>All marginal rates</span><span><span class="val" id="v-shift"></span></span></div>
+          <input type="range" id="s-shift" min="-10" max="10" step="0.5">
+          <small>Percentage points added to every bracket</small>
+        </div>
+        <div class="rates" id="tax-rates"></div>
         <div class="ctl">
           <div class="ctl-row"><span>Standard deduction</span><span><span class="val" id="v-sd"></span> <span class="cur" id="c-sd"></span></span></div>
           <input type="range" id="s-sd" min="0" max="40000" step="100">
@@ -230,7 +241,8 @@ function project(p){
 }
 
 /* ---------- tax model ---------- */
-var TC=null,TAX={rates:[],sd:0,beh:false},taxDelta=0,taxDeltaBn=0;
+var TC=null,TAX={rates:[],shift:0,sd:0,beh:false},taxDelta=0,taxDeltaBn=0;
+function effRates(){return TAX.rates.map(function(r){return Math.max(0,Math.min(90,Math.round((r+TAX.shift)*2)/2));});}
 function taxableIncome(y,sd){return Math.max(0,y-sd-(TC.current.exemption||0));}
 function incomeTax(y,rates,sd){var br=TC.current.brackets,ti=taxableIncome(y,sd),t=0;for(var k=0;k<br.length;k++){var lo=br[k][0],hi=k+1<br.length?br[k+1][0]:Infinity;if(ti>lo)t+=(Math.min(ti,hi)-lo)*rates[k]/100;}return t;}
 function mtr(y,rates,sd){var br=TC.current.brackets,ti=taxableIncome(y,sd),r=0;for(var k=0;k<br.length;k++)if(ti>br[k][0])r=rates[k];return r;}
@@ -239,7 +251,7 @@ function shareCurve(rates,sd){return TC.incomes.map(function(y){return (1-(incom
 function curRates(){return TC.current.brackets.map(function(b){return b[1];});}
 function modelRevenue(rates,sd,beh){var R=0,r0=curRates(),sd0=TC.current.std;TC.dist.forEach(function(d){var y=d.mean_income;if(beh){var m0=mtr(y,r0,sd0),m1=mtr(y,rates,sd);y=y*Math.pow((1-m1/100)/(1-m0/100),0.25);}R+=d.returns_m*1e6*incomeTax(y,rates,sd);});return R/1e9;}
 function taxCompute(){
-  var R0=modelRevenue(curRates(),TC.current.std,false),R1=modelRevenue(TAX.rates,TAX.sd,TAX.beh);
+  var R0=modelRevenue(curRates(),TC.current.std,false),R1=modelRevenue(effRates(),TAX.sd,TAX.beh);
   var actual=TC.actual_income_tax_pct_gdp||8.5;
   taxDelta=(R1/R0-1)*actual;
   taxDeltaBn=taxDelta/100*(DD.gdp_fy_bn||0);
@@ -255,7 +267,7 @@ function drawTaxCurves(el){
   INC_TICKS.forEach(function(v){var lx=Math.log10(v);if(lx<x0-1e-9||lx>x1+1e-9)return;g+='<text class="tick" x="'+X(lx).toFixed(1)+'" y="'+(h-mB+18)+'" text-anchor="middle">'+incLabel(v)+'</text>';});
   var path=function(arr){return arr.map(function(v,i){return (i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(v).toFixed(1);}).join('');};
   TC.curves.forEach(function(c){if(!c.current)g+='<path class="old" d="'+path(c.share)+'"/>';});
-  var cur=shareCurve(curRates(),TC.current.std),adj=shareCurve(TAX.rates,TAX.sd);
+  var cur=shareCurve(curRates(),TC.current.std),adj=shareCurve(effRates(),TAX.sd);
   var br=TC.current.brackets;
   var handleIncome=function(k){var lo=br[k][0],hi=k+1<br.length?br[k+1][0]:lo*2;return (lo+hi)/2+TAX.sd+(TC.current.exemption||0);};
   var idxFor=function(y){var lx=Math.log10(y),i=0;for(var k=1;k<xs.length;k++)if(Math.abs(xs[k]-lx)<Math.abs(xs[i]-lx))i=k;return i;};
@@ -264,14 +276,14 @@ function drawTaxCurves(el){
   br.forEach(function(b,k){var i=idxFor(handleIncome(k));g+='<circle class="handle" data-k="'+k+'" data-i="'+i+'" r="5" cx="'+X(xs[i]).toFixed(1)+'" cy="'+Y(adj[i]).toFixed(1)+'"><title>Drag to change the '+b[1]+'% bracket</title></circle>';});
   el.innerHTML='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Share of income kept after federal taxes, current law and your schedule">'+g+'</svg><div class="tt"></div>';
   var svg=el.firstChild,xh=svg.querySelector('.xh'),cap=svg.querySelector('.cap'),tt=el.querySelector('.tt'),adjPath=svg.querySelector('.adj'),handles=svg.querySelectorAll('.handle');
-  function refreshAdj(){adj=shareCurve(TAX.rates,TAX.sd);adjPath.setAttribute('d',path(adj));handles.forEach(function(hd){var i=+hd.dataset.i;hd.setAttribute('cy',Y(adj[i]).toFixed(1));});}
+  function refreshAdj(){adj=shareCurve(effRates(),TAX.sd);adjPath.setAttribute('d',path(adj));handles.forEach(function(hd){var i=+hd.dataset.i;hd.setAttribute('cy',Y(adj[i]).toFixed(1));});}
   el._refresh=refreshAdj;
   function idxAt(ev){var rb=svg.getBoundingClientRect(),x=(ev.clientX-rb.left)*(w/rb.width),lx=x0+(x-mL)/(w-mL-mR)*(x1-x0);var i=0;for(var k=1;k<xs.length;k++)if(Math.abs(xs[k]-lx)<Math.abs(xs[i]-lx))i=k;return i;}
   function shareAt(ev){var rb=svg.getBoundingClientRect(),py=(ev.clientY-rb.top)*(h/rb.height);return Math.max(0,Math.min(100,100-(py-mT)/(h-mT-mB)*100));}
   function show(ev){
     var i=idxAt(ev),px=X(xs[i]);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
     var y=TC.incomes[i],rb=svg.getBoundingClientRect();
-    tt.innerHTML='<b>$'+Math.round(y).toLocaleString('en-US')+' of wages</b><div>Current law <b>'+cur[i].toFixed(1)+'%</b> kept, marginal rate '+mtr(y,curRates(),TC.current.std)+'%</div><div>Your schedule <b>'+adj[i].toFixed(1)+'%</b> kept, marginal rate '+mtr(y,TAX.rates,TAX.sd)+'%</div>';
+    tt.innerHTML='<b>$'+Math.round(y).toLocaleString('en-US')+' of wages</b><div>Current law <b>'+cur[i].toFixed(1)+'%</b> kept, marginal rate '+mtr(y,curRates(),TC.current.std)+'%</div><div>Your schedule <b>'+adj[i].toFixed(1)+'%</b> kept, marginal rate '+mtr(y,effRates(),TAX.sd)+'%</div>';
     tt.style.display='block';var left=px/w*rb.width+12;if(left+tt.offsetWidth>rb.width)left=px/w*rb.width-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
   }
   var drag=null;
@@ -284,8 +296,9 @@ function drawTaxCurves(el){
     var i=drag.i,k=drag.k,y=TC.incomes[i],ti=taxableIncome(y,TAX.sd),lo=TC.current.brackets[k][0];
     if(ti<=lo)return;
     var target=shareAt(ev),now=adj[i],dTax=-(target-now)/100*y,dr=dTax/(ti-lo)*100;
-    var sl=q('#s-r'+k),r=Math.max(+sl.min,Math.min(+sl.max,Math.round((TAX.rates[k]+dr)*2)/2));
-    if(r!==TAX.rates[k]){sl.value=r;renderTax(true);render();}
+    var r=Math.round((TAX.rates[k]+dr)*2)/2,base=TC.current.brackets[k][1];
+    r=Math.max(Math.max(0,base-15),Math.min(Math.min(70,base+15),r));
+    if(r!==TAX.rates[k]){TAX.rates[k]=r;renderTax(true);render();}
     show(ev);
   }
   function endDrag(){if(!drag)return;drag=null;el.classList.remove('dragging');}
@@ -300,18 +313,23 @@ function drawTaxCurves(el){
   });
 }
 function bracketAt(y,sd){var br=TC.current.brackets,ti=taxableIncome(y,sd),k=-1;for(var j=0;j<br.length;j++)if(ti>br[j][0])k=j;return k;}
-function readTax(){TAX.rates=TC.current.brackets.map(function(b,k){return +q('#s-r'+k).value;});TAX.sd=+q('#s-sd').value;TAX.beh=q('#s-beh').checked;}
-function writeTax(){TC.current.brackets.forEach(function(b,k){q('#s-r'+k).value=TAX.rates[k];});q('#s-sd').value=TAX.sd;q('#s-beh').checked=TAX.beh;}
+function readTax(){TAX.shift=+q('#s-shift').value;TAX.sd=+q('#s-sd').value;TAX.beh=q('#s-beh').checked;}
+function writeTax(){q('#s-shift').value=TAX.shift;q('#s-sd').value=TAX.sd;q('#s-beh').checked=TAX.beh;}
+function ratesList(){
+  var br=TC.current.brackets,eff=effRates();
+  return '<span class="hd">bracket</span><span class="hd">now</span><span class="hd">yours</span>'+br.map(function(b,k){var lo=b[0],hi=k+1<br.length?br[k+1][0]:null;var span=hi?'$'+Math.round(lo/1000)+'k to $'+Math.round(hi/1000)+'k':'above $'+Math.round(lo/1000)+'k';var chg=Math.abs(eff[k]-b[1])>=0.25;return '<span class="rb">'+span+'</span><span class="rn">'+b[1]+'%</span><span class="rv'+(chg?' chg':'')+'">'+eff[k].toFixed(1)+'%</span>';}).join('');
+}
 function renderTax(inDrag){
   readTax();
-  TC.current.brackets.forEach(function(b,k){q('#v-r'+k).textContent=TAX.rates[k].toFixed(1)+'%';});
+  q('#v-shift').textContent=(TAX.shift>0?'+':TAX.shift<0?minus:'')+Math.abs(TAX.shift).toFixed(1)+' pt';
+  q('#tax-rates').innerHTML=ratesList();
   q('#v-sd').textContent='$'+TAX.sd.toLocaleString('en-US');
   taxCompute();
   var pdUsed=state.pd-taxDelta;
   var ro=[
     {k:'Revenue change',v:(taxDelta>=0?'+':minus)+Math.abs(taxDelta).toFixed(2)+'%',s:'of GDP a year, about '+(taxDelta>=0?'+':minus)+'$'+Math.round(Math.abs(taxDeltaBn))+' billion at fiscal '+DD.fy+' GDP'},
     {k:'Primary deficit used above',v:pct(pdUsed,1),s:pct(state.pd,1)+' from the slider'+(Math.abs(taxDelta)>=0.005?(taxDelta>0?' less ':' plus ')+Math.abs(taxDelta).toFixed(2)+' points from these tax changes':'')},
-    {k:'Top marginal rate',v:pct(TAX.rates[TAX.rates.length-1],1),s:'on taxable income above $'+TC.current.brackets[TC.current.brackets.length-1][0].toLocaleString('en-US')}
+    {k:'Top marginal rate',v:pct(effRates()[TAX.rates.length-1],1),s:'on taxable income above $'+TC.current.brackets[TC.current.brackets.length-1][0].toLocaleString('en-US')}
   ];
   q('#tax-readouts').innerHTML=ro.map(function(r){return '<div class="ro"><div class="k">'+esc(r.k)+'</div><div class="v">'+esc(r.v)+'</div><div class="s">'+esc(r.s)+'</div></div>';}).join('');
   var el=q('#chart-tax');
@@ -321,16 +339,15 @@ function buildTax(){
   TC=DASH.tax_curves;
   if(!TC||!TC.current||!TC.curves||!TC.curves.length)return;
   var br=TC.current.brackets;
-  TAX={rates:br.map(function(b){return b[1];}),sd:TC.current.std,beh:false};
+  TAX={rates:br.map(function(b){return b[1];}),shift:0,sd:TC.current.std,beh:false};
   q('#tax-year').textContent=TC.current.year;q('#tax-base').textContent=TC.base_year;
-  q('#tax-sliders').innerHTML=br.map(function(b,k){var lo=b[0],hi=k+1<br.length?br[k+1][0]:null;var span=hi?'$'+lo.toLocaleString('en-US')+' to $'+hi.toLocaleString('en-US'):'above $'+lo.toLocaleString('en-US');var r=b[1];return '<div class="ctl"><div class="ctl-row"><span>'+span+'</span><span><span class="val" id="v-r'+k+'"></span> <span class="cur">now '+r+'%</span></span></div><input type="range" id="s-r'+k+'" min="'+Math.max(0,r-10)+'" max="'+Math.min(70,r+10)+'" step="0.5"></div>';}).join('');
   q('#c-sd').textContent='now $'+TC.current.std.toLocaleString('en-US');
   writeTax();
-  br.forEach(function(b,k){q('#s-r'+k).addEventListener('input',function(){renderTax();render();});});
+  q('#s-shift').addEventListener('input',function(){renderTax();render();});
   q('#s-sd').addEventListener('input',function(){renderTax();render();});
   q('#s-beh').addEventListener('change',function(){renderTax();render();});
-  q('#tax-reset').addEventListener('click',function(){TAX={rates:br.map(function(b){return b[1];}),sd:TC.current.std,beh:TAX.beh};writeTax();renderTax();render();});
-  q('#tax-2017').addEventListener('click',function(){var old=[10,15,25,28,33,35,39.6];TAX.rates=br.map(function(b,k){return old[Math.min(k,old.length-1)];});writeTax();renderTax();render();});
+  q('#tax-reset').addEventListener('click',function(){TAX={rates:br.map(function(b){return b[1];}),shift:0,sd:TC.current.std,beh:TAX.beh};writeTax();renderTax();render();});
+  q('#tax-2017').addEventListener('click',function(){var old=[10,15,25,28,33,35,39.6];TAX.rates=br.map(function(b,k){return old[Math.min(k,old.length-1)];});TAX.shift=0;writeTax();renderTax();render();});
   q('#taxsec').hidden=false;q('#taxbox').hidden=false;
   renderTax();
 }
@@ -372,11 +389,11 @@ function fmtVal(id,v,unit){q('#v-'+id).textContent=pct(v,1);}
 function readState(){state.pd=+q('#s-pd').value;state.i=+q('#s-i').value;state.g=+q('#s-g').value;state.pi=+q('#s-pi').value;state.phase=q('#s-phase').checked;}
 function writeState(){q('#s-pd').value=state.pd;q('#s-i').value=state.i;q('#s-g').value=state.g;q('#s-pi').value=state.pi;q('#s-phase').checked=state.phase;}
 function updateHash(){var h='#pd='+state.pd+'&i='+state.i+'&g='+state.g+'&pi='+state.pi+(state.phase?'':'&phase=0');
-  if(TC&&TC.current){var r0=TC.current.brackets.map(function(b){return b[1];});if(TAX.rates.join(',')!==r0.join(','))h+='&t='+TAX.rates.join(',');if(TAX.sd!==TC.current.std)h+='&sd='+TAX.sd;if(TAX.beh)h+='&beh=1';}
+  if(TC&&TC.current){var r0=TC.current.brackets.map(function(b){return b[1];});if(TAX.rates.join(',')!==r0.join(','))h+='&t='+TAX.rates.join(',');if(TAX.shift)h+='&shift='+TAX.shift;if(TAX.sd!==TC.current.std)h+='&sd='+TAX.sd;if(TAX.beh)h+='&beh=1';}
   if(location.hash!==h)history.replaceState(null,'',h);}
 function readHash(){var m={};location.hash.slice(1).split('&').forEach(function(kv){var p=kv.split('=');if(p.length===2)m[p[0]]=p[1];});
   if(m.pd!=null&&!isNaN(+m.pd))state.pd=+m.pd;if(m.i!=null&&!isNaN(+m.i))state.i=+m.i;if(m.g!=null&&!isNaN(+m.g))state.g=+m.g;if(m.pi!=null&&!isNaN(+m.pi))state.pi=+m.pi;if(m.phase==='0')state.phase=false;
-  if(TC&&TC.current){if(m.t){var t=m.t.split(',').map(Number);if(t.length===TC.current.brackets.length&&t.every(function(v){return !isNaN(v);}))TAX.rates=t;}if(m.sd!=null&&!isNaN(+m.sd))TAX.sd=+m.sd;if(m.beh==='1')TAX.beh=true;}}
+  if(TC&&TC.current){if(m.t){var t=m.t.split(',').map(Number);if(t.length===TC.current.brackets.length&&t.every(function(v){return !isNaN(v);}))TAX.rates=t;}if(m.shift!=null&&!isNaN(+m.shift))TAX.shift=+m.shift;if(m.sd!=null&&!isNaN(+m.sd))TAX.sd=+m.sd;if(m.beh==='1')TAX.beh=true;}}
 
 function render(){
   readState();
@@ -419,7 +436,7 @@ function build(dash){
   var rows=[['Debt held by the public',pct(dd.debt,1)+' of GDP, '+dl],['Total public debt, including intragovernmental holdings',dd.gross_debt_pct?pct(dd.gross_debt_pct,1)+' of GDP ($'+dd.gross_debt_t.toFixed(1)+' trillion on '+fmtDay(dd.gross_debt_date)+' over the latest quarterly GDP); the projection uses debt held by the public, since the rest is the government owing itself':'not available'],['Total deficit, fiscal '+dd.fy,pct(dd.total_deficit,2)+' of GDP'],['Net interest, fiscal '+dd.fy,pct(dd.interest,2)+' of GDP ($'+Math.round(dd.interest_bn)+' billion)'],['Primary deficit, fiscal '+dd.fy,pct(dd.primary_deficit,2)+' of GDP'],['Effective interest rate on the debt',pct(dd.effective_rate,2)+', interest divided by average debt in fiscal '+dd.fy],['10-year Treasury yield',pct(dd.t10,2)+', latest monthly average'],['Real GDP growth',pct(dd.real_growth,2)+' over the four quarters to '+qLabel(dd.real_growth_through||dd.debt_date)],['Nominal GDP growth',pct(dd.nominal_growth,2)+' over the same four quarters'],['GDP inflation',pct(dd.gdp_inflation,2)+', nominal less real; CPI inflation is '+pct(dd.cpi,1)]];
   q('#starts').innerHTML=rows.map(function(r){return '<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>';}).join('');
   q('#method').innerHTML='<p>Each fiscal year the debt ratio moves by <code>d\u2032 = d \u00d7 (1 + i) / (1 + g) + p</code>, where <code>i</code> is the effective nominal interest rate on the debt, <code>g</code> is nominal GDP growth, <code>(1 + real growth)(1 + inflation) \u2212 1</code>, and <code>p</code> is the primary deficit as a share of GDP. Net interest in a year is <code>i \u00d7 d / (1 + g)</code> and the total deficit is that plus <code>p</code>. With the phase-in switched on, the effective rate starts at this year\u2019s '+pct(dd.effective_rate,1)+' and moves linearly to the slider\u2019s rate over six years, roughly the average maturity of marketable Treasury debt; switched off, the slider\u2019s rate applies to the whole stock from the first year.</p><p>Everything else is held fixed: no feedback from debt to interest rates or growth, no recessions, no changes in policy, and the primary deficit does not drift with an aging population or rising health costs the way official projections assume. Treat it as arithmetic for building intuition, not a forecast.</p>'+
-    '<p><b>Dragging the curve.</b> Grabbing the dashed curve at an income and pulling it up or down changes the marginal rate of the bracket that income falls in, by the amount that moves the share kept at that income to where the pointer is; the rate then applies to everyone in and above that bracket, so the curve to the right moves too. Incomes below the standard deduction have no bracket to change. The small circles mark one point per bracket.</p>'+
+    '<p><b>Changing the schedule.</b> The slider adds the same number of percentage points to every marginal rate, so +1 turns 10, 12, 22, \u2026, 37 into 11, 13, 23, \u2026, 38. Grabbing the dashed curve at an income and pulling it up or down changes the marginal rate of the bracket that income falls in, by the amount that moves the share kept at that income to where the pointer is; the rate then applies to everyone in and above that bracket, so the curve to the right moves too. The two combine: the bracket-by-bracket changes from dragging plus the uniform shift. Dragging can move a bracket up to 15 points either way from current law; incomes below the standard deduction have no bracket to change. The small circles mark one point per bracket, and the list under the slider shows the resulting schedule.</p>'+
     '<p><b>Tax changes.</b> The rate schedule is the current single-filer schedule from <code>build/taxlaw.py</code>. Revenue under a schedule is computed for a synthetic population of tax returns, nine income classes from IRS Statistics of Income Table 1.1 for tax year '+(TC?TC.dist_year:2022)+', each represented by its mean income scaled up with nominal GDP, all treated as single filers taking the standard deduction. That model overstates actual receipts (it ignores joint filing, itemizing, credits, and capital gains), so only the proportional change is used: the model\u2019s percentage change in revenue is applied to actual individual income tax receipts, '+(TC&&TC.actual_income_tax_pct_gdp?TC.actual_income_tax_pct_gdp.toFixed(2)+'% of GDP in fiscal '+TC.actual_income_tax_fy:'about 8.5% of GDP')+', and the result is subtracted from the primary deficit in every projection year. With the behavioral box checked, each class\u2019s taxable income is multiplied by the ratio of net-of-tax marginal rates raised to the power 0.25, a common central estimate of the elasticity of taxable income. Payroll taxes and the employer half of them are left unchanged; the standard deduction slider does affect revenue.</p>';
   q('#loading').hidden=true;q('#lab').hidden=false;
   ['pd','i','g','pi'].forEach(function(id){q('#s-'+id).addEventListener('input',render);});
