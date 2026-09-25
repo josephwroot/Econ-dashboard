@@ -210,6 +210,19 @@ series:
     freq_label: Quarterly
     note: Excludes debt held in government accounts such as the Social Security trust funds. Gross debt is the tile next door.
 
+  - id: gross_debt_gdp
+    group: fiscal
+    title: Total public debt
+    sub: Gross federal debt, including intragovernmental holdings, share of GDP
+    kind: rate
+    freq: Q
+    fmt: pct0
+    axis: pct
+    source: {type: fred, series: GFDEGDQ188S}
+    src_label: Treasury and BEA via FRED
+    freq_label: Quarterly
+    note: The headline figure often quoted as "the national debt." About a fifth of it is held in government accounts such as the Social Security trust funds; the debt held by the public tile is the part owed to outside lenders and the one that drives interest costs.
+
   - id: balance
     group: fiscal
     title: Federal budget balance

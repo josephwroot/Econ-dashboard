@@ -511,6 +511,13 @@ def debt_dynamics(out_series, out_comp, gdp_fy):
         debts = [dq[k] / 100 * gq[k] * 1000 for k in keys if k in dq and k in gq]
         if debts:
             dd['effective_rate'] = dd['interest_bn'] / (sum(debts) / len(debts)) * 100
+    gd = by.get('gross_debt')
+    if gd and by.get('gdp_nominal'):
+        dd['gross_debt_t'] = gd['obs'][-1][1]
+        dd['gross_debt_date'] = gd['obs'][-1][0]
+        dd['gross_debt_pct'] = gd['obs'][-1][1] / by['gdp_nominal']['obs'][-1][1] * 100
+        dd['gdp_latest_t'] = by['gdp_nominal']['obs'][-1][1]
+        dd['gdp_latest_date'] = by['gdp_nominal']['obs'][-1][0]
     t = by.get('t10')
     if t:
         dd['t10'] = t['obs'][-1][1]
