@@ -101,6 +101,15 @@ h1{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.15;marg
 .bars.big .bt{height:14px}
 .bars .sh{color:var(--muted)}
 .mini svg{display:block;width:100%;height:auto}
+.curves-wrap{margin-top:auto}
+.curves-wrap svg{display:block;width:100%;height:auto}
+.chart .old{fill:none;stroke:var(--faint);stroke-width:1.1;opacity:.55;stroke-linejoin:round}
+.chart .cur{fill:none;stroke:var(--line);stroke-width:2;stroke-linejoin:round}
+.chart .hi{opacity:1;stroke:var(--ink);stroke-width:1.8}
+.leg-btn{appearance:none;-webkit-appearance:none;font:inherit;font-size:13px;background:none;border:0;padding:2px 4px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;gap:6px;border-radius:4px}
+.leg-btn[aria-pressed="true"]{color:var(--ink);background:var(--chip)}
+.leg-btn i{display:inline-block;width:14px;height:0;border-top:2px solid var(--faint);opacity:.7}
+.leg-btn.cur i{border-top-color:var(--line);opacity:1}
 .mini-cap{font-size:12px;color:var(--faint);margin:0 0 4px}
 
 footer{margin:44px 0 40px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;max-width:80ch}
@@ -341,6 +350,81 @@ function barsHTML(c,big){
   }).join('')+'</div>';
 }
 
+/* ---------- take-home curves ---------- */
+var INC_TICKS=[10000,20000,50000,100000,200000,500000,1000000,2000000,5000000];
+function incLabel(v){return v>=1e6?'$'+(v/1e6)+'M':'$'+(v/1000)+'k';}
+function curvesSVG(tc,opt){
+  var W=opt.w,H=opt.h,mL=opt.mL,mR=8,mT=opt.mT,mB=opt.mB,key=opt.key||'share';
+  var xs=tc.incomes.map(function(v){return Math.log10(v);}),x0=xs[0],x1=xs[xs.length-1];
+  var X=function(lx){return mL+(lx-x0)/(x1-x0)*(W-mL-mR);},Y=function(v){return mT+(100-v)/100*(H-mT-mB);};
+  var g='';
+  var tk=opt.fs?'font-size="'+opt.fs+'" fill="var(--faint)"':'class="tick"';
+  [0,25,50,75,100].forEach(function(v){var yy=Y(v);g+='<line x1="'+mL+'" x2="'+(W-mR)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'+(opt.ylabels?'<text '+tk+' x="'+(mL-6)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end">'+v+'%</text>':'');});
+  INC_TICKS.forEach(function(v,i){var lx=Math.log10(v);if(lx<x0-1e-9||lx>x1+1e-9)return;if(opt.sparse&&i%2)return;g+='<text '+tk+' x="'+X(lx).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="middle">'+incLabel(v)+'</text>';});
+  var cur=null;
+  tc.curves.forEach(function(c){
+    var d=c[key].map(function(v,i){return (i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(v).toFixed(1);}).join('');
+    if(c.current)cur='<path class="cur" d="'+d+'"/>';else g+='<path class="old" data-year="'+c.year+'" d="'+d+'"/>';
+  });
+  g+=cur||'';
+  return {svg:g,X:X,Y:Y,xs:xs,W:W,H:H,mL:mL,mR:mR,mT:mT,mB:mB};
+}
+function curvesMini(tc){
+  var r=curvesSVG(tc,{w:600,h:210,mL:40,mT:8,mB:22,fs:12,ylabels:true});
+  return '<div class="mini-cap">Share kept after federal income and payroll taxes, single filer, '+tc.base_year+' dollars; current year in color, earlier decades in grey</div><svg viewBox="0 0 600 210" aria-hidden="true">'+r.svg+'</svg>';
+}
+function curvesTile(tc){
+  var b=document.createElement('button');b.className='tile wide';b.type='button';b.setAttribute('aria-haspopup','dialog');
+  var cur=tc.curves.filter(function(c){return c.current;})[0],inc=tc.incomes;
+  function at(v){var best=0;for(var i=0;i<inc.length;i++)if(Math.abs(Math.log(inc[i]/v))<Math.abs(Math.log(inc[best]/v)))best=i;return cur.share[best];}
+  var chips=[[50000,'at $50k'],[250000,'at $250k'],[1000000,'at $1M']].map(function(p){return '<span class="chip"><b>'+at(p[0]).toFixed(0)+'%</b> kept '+p[1]+'</span>';}).join('');
+  b.innerHTML='<div class="tile-head"><span class="tile-title">Share of income kept after federal taxes</span><span class="tile-period">'+tc.base_year+' and each decade since the 1950s</span></div>'+
+    '<div class="tile-value"><span class="chips">'+chips+'</span></div>'+
+    '<div class="curves-wrap chart">'+curvesMini(tc)+'</div>'+
+    '<div class="tile-foot"><span>Statutory schedules, Tax Foundation and SSA; deflated with the CPI</span><span>Law as of '+tc.current.year+'</span></div>';
+  b.addEventListener('click',function(){openCurvesModal(tc,b);});
+  return b;
+}
+var curvesState={key:'share',hi:null};
+function renderCurves(el,tc){
+  var w=el.clientWidth||640,h=Math.round(Math.max(260,Math.min(420,w*0.45)));
+  var r=curvesSVG(tc,{w:w,h:h,mL:48,mT:14,mB:26,ylabels:true,key:curvesState.key});
+  var g=r.svg+'<line class="xh" style="display:none" y1="'+r.mT+'" y2="'+(h-r.mB)+'"/><rect class="cap" x="'+r.mL+'" y="'+r.mT+'" width="'+(w-r.mL-r.mR)+'" height="'+(h-r.mT-r.mB)+'" fill="transparent"/>';
+  el.innerHTML='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Share of income kept after federal taxes, by income level and decade">'+g+'</svg><div class="tt"></div>';
+  var svg=el.firstChild,xh=svg.querySelector('.xh'),cap=svg.querySelector('.cap'),tt=el.querySelector('.tt');
+  if(curvesState.hi!=null){var p=svg.querySelector('path[data-year="'+curvesState.hi+'"]');if(p)p.classList.add('hi');}
+  function show(ev){
+    var rb=svg.getBoundingClientRect(),x=(ev.clientX-rb.left)*(w/rb.width),lx=r.xs[0]+(x-r.mL)/(w-r.mL-r.mR)*(r.xs[r.xs.length-1]-r.xs[0]);
+    var i=0;for(var k=1;k<r.xs.length;k++)if(Math.abs(r.xs[k]-lx)<Math.abs(r.xs[i]-lx))i=k;
+    var px=r.X(r.xs[i]);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
+    var rows='<b>$'+withCommas(tc.incomes[i])+' of wages, '+tc.base_year+' dollars</b>';
+    tc.curves.slice().reverse().forEach(function(c){rows+='<div>'+(c.current?'<b>':'')+esc(c.label)+(c.current?' (current)</b>':'')+' <b>'+c[curvesState.key][i].toFixed(0)+'%</b></div>';});
+    tt.innerHTML=rows;tt.style.display='block';
+    var left=px/w*rb.width+12;if(left+tt.offsetWidth>rb.width)left=px/w*rb.width-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
+  }
+  cap.addEventListener('pointermove',show);cap.addEventListener('pointerdown',show);
+  cap.addEventListener('pointerleave',function(){xh.style.display='none';tt.style.display='none';});
+}
+function openCurvesModal(tc,btn){
+  current={kind:'curves',tc:tc};opener=btn;curvesState={key:'share',hi:null};
+  q('#m-title').textContent='Share of income kept after federal taxes';
+  q('#m-sub').textContent='Single filer with wage income and the standard deduction, no credits; earlier decades restated in '+tc.base_year+' dollars with the CPI';
+  q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
+  q('#m-num').textContent='';q('#m-period').textContent='';q('#m-chips').innerHTML='';
+  q('#m-comp').innerHTML='<div class="sect"><h3>By income level</h3><div class="seg" id="m-taxkey" role="group" aria-label="Taxes included"><button type="button" data-k="share" aria-pressed="true">Income and payroll taxes</button><button type="button" data-k="share_income_tax_only" aria-pressed="false">Income tax only</button></div></div>'+
+    '<div class="chart" id="m-curves"></div>'+
+    '<div class="legend" id="m-curveleg">'+tc.curves.map(function(c){return '<button type="button" class="leg-btn'+(c.current?' cur':'')+'" data-year="'+c.year+'" aria-pressed="false"><i></i>'+esc(c.label)+(c.current?' ('+c.year+', current)':' ('+c.year+')')+'</button>';}).join('')+'</div>';
+  q('#m-taxkey').querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){curvesState.key=b.dataset.k;q('#m-taxkey').querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});renderCurves(q('#m-curves'),tc);});});
+  q('#m-curveleg').querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){var y=+b.dataset.year;curvesState.hi=curvesState.hi===y?null:y;q('#m-curveleg').querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(+x.dataset.year===curvesState.hi));});renderCurves(q('#m-curves'),tc);});});
+  var laws=tc.curves.map(function(c){return c.label+': '+c.law;}).join('. ');
+  q('#m-meta').innerHTML='<dt>Source</dt><dd>Statutory rate schedules from the <a href="https://taxfoundation.org/data/all/federal/historical-income-tax-rates-brackets/" target="_blank" rel="noopener">Tax Foundation historical table</a>; standard deductions and exemptions from IRS Statistics of Income; payroll rates and wage bases from the Social Security Administration; parameters listed in <a href="https://github.com/josephwroot/econ-dashboard/blob/main/build/taxlaw.py" target="_blank" rel="noopener">build/taxlaw.py</a></dd><dt>Years shown</dt><dd>'+esc(laws)+'</dd><dt>Prices</dd><dd>Each year\u2019s brackets are applied to nominal income equal to the '+tc.base_year+'-dollar amount times that year\u2019s CPI relative to the latest twelve-month average</dd>';
+  q('#m-note').textContent='Simplifications: no earned income credit (small for a single filer without children), no phase-out of the personal exemption, no alternative minimum tax, no state or local taxes. The employer half of payroll taxes is also excluded, so the true wedge on labor is larger than shown. Before 1971 single filers used the joint schedule on half the brackets.';q('#m-note').style.display='';
+  q('#m-err').style.display='none';
+  var m=q('#modal');m.hidden=false;document.body.style.overflow='hidden';
+  renderCurves(q('#m-curves'),tc);
+  q('#m-close').focus();
+}
+
 /* ---------- page ---------- */
 function buildBrief(){
   var g=byId('gdp_growth'),u=byId('unrate'),c=byId('cpi'),b=byId('balance'),d=byId('debt_gdp'),parts=[];
@@ -410,6 +494,7 @@ function build(dash){
     sec.innerHTML='<h2>'+esc(gr.title)+'</h2><p class="gdesc">'+esc(gr.desc||'')+'</p>';
     var grid=document.createElement('div');grid.className='grid';
     items.forEach(function(s){grid.appendChild(tile(s));});
+    if(gr.id==='fiscal'&&dash.tax_curves&&dash.tax_curves.curves&&dash.tax_curves.curves.length)grid.appendChild(curvesTile(dash.tax_curves));
     sec.appendChild(grid);main.appendChild(sec);
   });
 }
@@ -508,7 +593,8 @@ var RANGES=[['10y',10],['25y',25],['50y',50],['Max',null]];
 
 function draw(){
   if(!current)return;
-  if(current.kind==='comp'){if(current.hist&&q('#m-stacked'))renderStacked(q('#m-stacked'),current,state.mode);}
+  if(current.kind==='curves'){if(q('#m-curves'))renderCurves(q('#m-curves'),current.tc);}
+  else if(current.kind==='comp'){if(current.hist&&q('#m-stacked'))renderStacked(q('#m-stacked'),current,state.mode);}
   else if(current.obs&&current.obs.length)renderChart(q('#m-chart'),current,state);
 }
 function setRange(r){state.range=r;q('#m-range').querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.r===String(r)));});draw();}

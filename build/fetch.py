@@ -19,6 +19,9 @@ from zoneinfo import ZoneInfo
 import requests
 import yaml
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from taxlaw import TAXLAW, INCOME_CLASSES, INCOME_CLASSES_YEAR, income_tax, payroll_tax, marginal_rate  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'data')
 CSVDIR = os.path.join(DATA, 'csv')
@@ -529,6 +532,68 @@ def debt_dynamics(out_series, out_comp, gdp_fy):
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in dd.items()}
 
 
+def cpi_annual_averages(cpi_obs):
+    by_year = {}
+    for d, v in cpi_obs:
+        by_year.setdefault(int(d[:4]), []).append(v)
+    return {y: sum(v) / len(v) for y, v in by_year.items()}
+
+
+def tax_curves(out_series, out_comp, cpi_obs):
+    """Share of wage income kept after federal income and payroll taxes, by income level,
+    for one year per decade, all in this year's dollars."""
+    cpi_year = cpi_annual_averages(cpi_obs)
+    cpi_now = sum(v for _, v in cpi_obs[-12:]) / min(12, len(cpi_obs))
+    base_year = int(cpi_obs[-1][0][:4])
+    incomes = [10 ** (4 + k * (6.7 - 4) / 60) for k in range(61)]   # $10,000 to $5,000,000
+    curves = []
+    for year in sorted(TAXLAW):
+        law = TAXLAW[year]
+        factor = 1.0 if year >= base_year else (cpi_year.get(year, cpi_now) / cpi_now)
+        share_all, share_inc, mtr = [], [], []
+        for y in incomes:
+            yn = y * factor
+            it = income_tax(yn, law)
+            pt = payroll_tax(yn, law)
+            share_inc.append(round((1 - it / yn) * 100, 3))
+            share_all.append(round((1 - (it + pt) / yn) * 100, 3))
+            mtr.append(marginal_rate(yn, law))
+        curves.append({'year': year, 'label': law['label'], 'law': law['law'], 'cpi_factor': round(factor, 4),
+                       'share': share_all, 'share_income_tax_only': share_inc, 'marginal': mtr,
+                       'current': year == max(TAXLAW)})
+    cur_year = max(TAXLAW)
+    cur = TAXLAW[cur_year]
+    # income distribution scaled from the SOI year to now by nominal GDP per year
+    by = {x['id']: x for x in out_series if x.get('obs')}
+    scale = 1.0
+    g = by.get('gdp_nominal')
+    if g:
+        yrs = {}
+        for d, v in g['obs']:
+            yrs.setdefault(int(d[:4]), []).append(v)
+        if INCOME_CLASSES_YEAR in yrs and yrs.get(base_year):
+            scale = (sum(yrs[base_year]) / len(yrs[base_year])) / (sum(yrs[INCOME_CLASSES_YEAR]) / len(yrs[INCOME_CLASSES_YEAR]))
+    dist = [{'lo': lo, 'hi': hi, 'returns_m': n, 'mean_income': round(agi_bn * 1e9 / (n * 1e6) * scale)} for lo, hi, n, agi_bn in INCOME_CLASSES]
+    model_rev = sum(d['returns_m'] * 1e6 * income_tax(d['mean_income'], cur) for d in dist) / 1e9
+    actual_pct, actual_fy = None, None
+    for c in out_comp:
+        if c['id'] == 'receipts' and c.get('hist') and c['hist'].get('x'):
+            hx = c['hist']
+            cats = dict((n, v) for n, v in hx['cats'])
+            if 'Individual income taxes' in cats and hx.get('gdp') and hx['gdp'][-1]:
+                actual_pct = cats['Individual income taxes'][-1] / hx['gdp'][-1] * 100
+                actual_fy = hx['x'][-1]
+    return {
+        'base_year': base_year, 'incomes': [round(x) for x in incomes], 'curves': curves,
+        'current': {'year': cur_year, 'brackets': cur['brackets'], 'std': cur['std'].get('fixed', 0),
+                    'exemption': cur['exemption'], 'payroll': cur['payroll'], 'law': cur['law']},
+        'dist': dist, 'dist_year': INCOME_CLASSES_YEAR, 'dist_scale': round(scale, 4),
+        'model_revenue_bn': round(model_rev, 1), 'actual_income_tax_pct_gdp': round(actual_pct, 3) if actual_pct else None,
+        'actual_income_tax_fy': actual_fy,
+        'filer': 'single filer, wage income only, standard deduction, no credits; employee-side payroll taxes included; state taxes excluded',
+    }
+
+
 def load_previous():
     p = os.path.join(DATA, 'dashboard.json')
     if os.path.exists(p):
@@ -708,6 +773,13 @@ def main():
         dd = prev.get('debt_dynamics', {})
         status['notes'].append(f'debt dynamics: {e}')
 
+    try:
+        tc = tax_curves(out_series, out_comp, fred_obs('CPIAUCSL'))
+    except Exception as e:  # noqa: BLE001
+        tc = prev.get('tax_curves', {})
+        status['notes'].append(f'tax curves: {e}')
+        traceback.print_exc()
+
     now_et = NOW.astimezone(ET)
     dash = {
         'title': man.get('title', 'Economic dashboard'),
@@ -719,6 +791,7 @@ def main():
         'recessions': rec,
         'releases': releases_week,
         'debt_dynamics': dd,
+        'tax_curves': tc,
         'week_start': (TODAY_ET - dt.timedelta(days=TODAY_ET.weekday())).isoformat(),
         'today': TODAY_ET.isoformat(),
         'status': {'ok': len(status['ok']), 'stale': list(status['stale']), 'failed': list(status['failed'])},
