@@ -22,6 +22,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.pages.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,19 +45,34 @@ jobs:
             git commit -m "data: $(date -u '+%Y-%m-%d %H:%MZ')"
             git push
           fi
+      - name: Check that GitHub Pages is switched on
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --silent 2>/dev/null; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GitHub Pages is not enabled yet. In the repository settings, under Pages, set Source to GitHub Actions. Data was still updated."
+          fi
       - name: Assemble site
+        if: steps.pages.outputs.enabled == 'true'
         run: |
           mkdir -p _site
           cp site/index.html _site/index.html
           cp -r data _site/data
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.enabled == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
         with:
           path: _site
 
   deploy:
     needs: update
+    if: needs.update.outputs.pages == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
