@@ -493,6 +493,9 @@ def parse_panel_table(grid):
         if matched and not re.fullmatch(r'\d{4}', lab):
             cur = matched
             continue
+        if lab and not re.match(r'\d{4}', lab) and not (isinstance(row[0], (int, float)) and 1990 <= float(row[0]) <= 2100):
+            cur = None   # a section we do not use (constant-dollar floors, for instance) until the next known heading
+            continue
         yr = None
         if re.fullmatch(r'\d{4}(\s*\[\d+\])?', lab):
             yr = int(lab[:4])
