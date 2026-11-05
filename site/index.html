@@ -530,19 +530,29 @@ function lorenzPoints(t,key){
   if(out[out.length-1].x<100)out.push({x:100,y:100,label:'All returns',edge:true});
   return out;
 }
+function sharePoints(t){
+  var tax=lorenzPoints(t,'tax_share'),agi=lorenzPoints(t,'agi_share'),out=[];
+  tax.forEach(function(p){var a=null;for(var j=0;j<agi.length;j++)if(Math.abs(agi[j].x-p.x)<1e-6)a=agi[j];if(a)out.push({x:a.y,y:p.y,rank:p.x,top:p.top,label:p.label,edge:p.edge});});
+  return out;
+}
 function lorenzSVG(t,opt){
-  var W=opt.w,H=opt.h,mL=opt.mL,mR=10,mT=opt.mT,mB=opt.mB;
-  var tax=lorenzPoints(t,'tax_share'),agi=lorenzPoints(t,'agi_share');
+  var W=opt.w,H=opt.h,mL=opt.mL,mR=10,mT=opt.mT,mB=opt.mB,mode=opt.mode||'rank';
+  var tax=lorenzPoints(t,'tax_share'),agi=lorenzPoints(t,'agi_share'),sp=sharePoints(t);
   var X=function(x){return mL+x/100*(W-mL-mR);},Y=function(v){return mT+(100-v)/100*(H-mT-mB);};
   var g='',tk=opt.fs?'font-size="'+opt.fs+'" fill="var(--faint)"':'class="tick"';
   [0,25,50,75,100].forEach(function(v){var yy=Y(v);g+='<line x1="'+mL+'" x2="'+(W-mR)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/><text '+tk+' x="'+(mL-6)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end">'+v+'%</text>';});
-  [0,20,40,60,80,100].forEach(function(x){g+='<text '+tk+' x="'+X(x).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="'+(x===0?'start':x===100?'end':'middle')+'">'+x+(x===100?'th':'th')+'</text>';});
+  [0,20,40,60,80,100].forEach(function(x){g+='<text '+tk+' x="'+X(x).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="'+(x===0?'start':x===100?'end':'middle')+'">'+x+(mode==='rank'?'th':'%')+'</text>';});
   var path=function(pts){return pts.map(function(p,i){return (i?'L':'M')+X(p.x).toFixed(1)+' '+Y(p.y).toFixed(1);}).join('');};
   g+='<path class="diag" d="M'+X(0).toFixed(1)+' '+Y(0).toFixed(1)+'L'+X(100).toFixed(1)+' '+Y(100).toFixed(1)+'"/>';
-  g+='<path class="ser2" d="'+path(agi)+'"/><path class="cur" d="'+path(tax)+'"/>';
-  tax.forEach(function(p){if(p.edge)return;g+='<circle class="last" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
-  agi.forEach(function(p){if(p.edge)return;g+='<circle class="dot2" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
-  return {svg:g,X:X,Y:Y,tax:tax,agi:agi,W:W,H:H,mL:mL,mR:mR,mT:mT,mB:mB};
+  if(mode==='rank'){
+    g+='<path class="ser2" d="'+path(agi)+'"/><path class="cur" d="'+path(tax)+'"/>';
+    tax.forEach(function(p){if(p.edge)return;g+='<circle class="last" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
+    agi.forEach(function(p){if(p.edge)return;g+='<circle class="dot2" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
+  }else{
+    g+='<path class="cur" d="'+path(sp)+'"/>';
+    sp.forEach(function(p){if(p.edge)return;g+='<circle class="last" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
+  }
+  return {svg:g,X:X,Y:Y,tax:tax,agi:agi,sp:sp,mode:mode,W:W,H:H,mL:mL,mR:mR,mT:mT,mB:mB};
 }
 function shareOf(t,pct,key){for(var i=0;i<t.points.length;i++){var p=t.points[i];if(p.kind==='top'&&Math.abs(p.pct-pct)<1e-9)return p[key];}return null;}
 function taxsharesTile(t){
@@ -558,25 +568,35 @@ function taxsharesTile(t){
   b.addEventListener('click',function(){openTaxsharesModal(t,b);});
   return b;
 }
+var lorenzMode='rank';
 function renderLorenz(el,t){
   var w=el.clientWidth||640,h=Math.round(Math.max(260,Math.min(420,w*0.45)));
-  var r=lorenzSVG(t,{w:w,h:h,mL:48,mT:14,mB:26});
+  var r=lorenzSVG(t,{w:w,h:h,mL:48,mT:14,mB:26,mode:lorenzMode});
   var g=r.svg+'<line class="xh" style="display:none" y1="'+r.mT+'" y2="'+(h-r.mB)+'"/><rect class="cap" x="'+r.mL+'" y="'+r.mT+'" width="'+(w-r.mL-r.mR)+'" height="'+(h-r.mT-r.mB)+'" fill="transparent"/>';
   el.innerHTML='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Cumulative share of income tax and income by percentile">'+g+'</svg><div class="tt"></div>';
   var svg=el.firstChild,xh=svg.querySelector('.xh'),cap=svg.querySelector('.cap'),tt=el.querySelector('.tt');
   function show(ev){
     var rb=svg.getBoundingClientRect(),x=(ev.clientX-rb.left)*(w/rb.width),xv=(x-r.mL)/(w-r.mL-r.mR)*100;
-    var i=0;for(var k=1;k<r.tax.length;k++)if(!r.tax[k].edge&&Math.abs(r.tax[k].x-xv)<Math.abs(r.tax[i].x-xv))i=k;
-    if(r.tax[i].edge){for(k=0;k<r.tax.length;k++)if(!r.tax[k].edge){i=k;break;}}
-    var p=r.tax[i],px=r.X(p.x);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
-    var a=null;for(var j=0;j<r.agi.length;j++)if(Math.abs(r.agi[j].x-p.x)<1e-6)a=r.agi[j];
+    var arr=r.mode==='rank'?r.tax:r.sp;
+    var i=0;for(var k=1;k<arr.length;k++)if(!arr[k].edge&&Math.abs(arr[k].x-xv)<Math.abs(arr[i].x-xv))i=k;
+    if(arr[i].edge){for(k=0;k<arr.length;k++)if(!arr[k].edge){i=k;break;}}
+    var p=arr[i],px=r.X(p.x);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
+    var taxv=p.y,agiv=null;
+    if(r.mode==='rank'){for(var j=0;j<r.agi.length;j++)if(Math.abs(r.agi[j].x-p.x)<1e-6)agiv=r.agi[j].y;}else agiv=p.x;
     var pt=null;for(j=0;j<t.points.length;j++)if(t.points[j].kind==='top'&&Math.abs(t.points[j].pct-p.top)<1e-6)pt=t.points[j];
-    tt.innerHTML='<b>'+esc(p.label)+'</b><div>pays <b>'+p.y.toFixed(1)+'%</b> of income tax'+(a?', earns <b>'+a.y.toFixed(1)+'%</b> of AGI':'')+'</div>'+(pt&&pt.agi_floor?'<div>the top '+(+p.top.toFixed(3))+'% above it starts at $'+withCommas(pt.agi_floor)+' of AGI'+(pt.avg_rate!=null?' and pays an average rate of '+pt.avg_rate.toFixed(1)+'%':'')+'</div>':'');
+    tt.innerHTML='<b>'+esc(p.label)+'</b><div>pays <b>'+taxv.toFixed(1)+'%</b> of income tax'+(agiv!=null?', earns <b>'+agiv.toFixed(1)+'%</b> of AGI':'')+(agiv?' (ratio '+(taxv/agiv).toFixed(2)+')':'')+'</div>'+(pt&&pt.agi_floor?'<div>the top '+(+p.top.toFixed(3))+'% above it starts at $'+withCommas(pt.agi_floor)+' of AGI'+(pt.avg_rate!=null?' and pays an average rate of '+pt.avg_rate.toFixed(1)+'%':'')+'</div>':'');
     tt.style.display='block';var left=px/w*rb.width+12;if(left+tt.offsetWidth>rb.width)left=px/w*rb.width-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
   }
   cap.addEventListener('pointermove',show);cap.addEventListener('pointerdown',show);cap.addEventListener('pointerleave',function(){xh.style.display='none';tt.style.display='none';});
 }
+var LNOTES={rank:'Returns are ranked by AGI from the poorest at the left to the richest at the right. The height of each curve at a percentile is the share of all income tax (or all AGI) accounted for by every return at or below that rank. The IRS publishes no points below the 50th percentile, so the first segment is drawn straight to the origin.',
+  share:'Each point is one income group counted from the bottom: its cumulative share of all AGI along the bottom, its cumulative share of all income tax up the side. A proportional tax would run along the dashed line; the curve lies below it wherever lower incomes carry a smaller share of the tax than of the income.'};
+var LLEGS={rank:'<span><i style="border-top:2px solid var(--line);width:14px;height:0;display:inline-block"></i>Share of income tax</span><span><i style="border-top:2px solid var(--c5);width:14px;height:0;display:inline-block"></i>Share of AGI</span><span><i style="border-top:1px dashed var(--faint);width:14px;height:0;display:inline-block"></i>Equal shares</span>',
+  share:'<span><i style="border-top:2px solid var(--line);width:14px;height:0;display:inline-block"></i>Cumulative tax share against cumulative AGI share</span><span><i style="border-top:1px dashed var(--faint);width:14px;height:0;display:inline-block"></i>Proportional tax</span>'};
 function drawTaxshares(t){
+  if(q('#m-lnote'))q('#m-lnote').textContent=LNOTES[lorenzMode];
+  if(q('#m-lleg'))q('#m-lleg').innerHTML=LLEGS[lorenzMode];
+  if(q('#m-lmode'))q('#m-lmode').querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.m===lorenzMode));if(!b._wired){b._wired=true;b.addEventListener('click',function(){lorenzMode=b.dataset.m;drawTaxshares(t);});}});
   if(q('#m-lorenz'))renderLorenz(q('#m-lorenz'),t);
   if(q('#m-tshist')&&t.history&&t.history.years.length>1){
     var H=t.history,pick=[['top',1],['top',10],['bottom',50]],lines=[];
@@ -592,8 +612,9 @@ function openTaxsharesModal(t,btn){
   q('#m-num').textContent='';q('#m-period').textContent='';q('#m-chips').className='chips';
   var top1=shareOf(t,1,'tax_share'),top1a=shareOf(t,1,'agi_share');
   q('#m-chips').innerHTML=(top1!=null?'<span class="chip">Top 1% earned <b>'+top1a.toFixed(1)+'%</b> of AGI and paid <b>'+top1.toFixed(1)+'%</b> of income tax</span>':'');
-  var tbl='<table class="ptable"><tr><th>Group</th><th>AGI above</th><th>Share of AGI</th><th>Share of income tax</th><th>Average tax rate</th></tr>'+t.points.map(function(p){return '<tr><td>'+esc(p.label)+'</td><td>'+(p.agi_floor?'$'+withCommas(p.agi_floor):'\u2014')+'</td><td>'+(p.agi_share!=null?p.agi_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.tax_share!=null?p.tax_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.avg_rate!=null?p.avg_rate.toFixed(1)+'%':'\u2014')+'</td></tr>';}).join('')+'</table>';
-  q('#m-comp').innerHTML='<div class="sect"><h3>Cumulative share by income rank</h3></div><p class="note" style="margin:0 0 6px">Returns are ranked by AGI from the poorest at the left to the richest at the right. The height of each curve at a percentile is the share of all income tax (or all AGI) accounted for by every return at or below that rank. The IRS publishes no points below the 50th percentile, so the first segment is drawn straight to the origin.</p><div class="chart" id="m-lorenz"></div><div class="legend"><span><i style="border-top:2px solid var(--line);width:14px;height:0;display:inline-block"></i>Share of income tax</span><span><i style="border-top:2px solid var(--c5);width:14px;height:0;display:inline-block"></i>Share of AGI</span><span><i style="border-top:1px dashed var(--faint);width:14px;height:0;display:inline-block"></i>Equal shares</span></div>'+
+  var tbl='<table class="ptable"><tr><th>Group</th><th>AGI above</th><th>Share of AGI</th><th>Share of income tax</th><th>Tax share \u00f7 AGI share</th><th>Average tax rate</th></tr>'+t.points.map(function(p){return '<tr><td>'+esc(p.label)+'</td><td>'+(p.agi_floor?'$'+withCommas(p.agi_floor):'\u2014')+'</td><td>'+(p.agi_share!=null?p.agi_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.tax_share!=null?p.tax_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.tax_share!=null&&p.agi_share?(p.tax_share/p.agi_share).toFixed(2):'\u2014')+'</td><td>'+(p.avg_rate!=null?p.avg_rate.toFixed(1)+'%':'\u2014')+'</td></tr>';}).join('')+'</table>';
+  lorenzMode='rank';
+  q('#m-comp').innerHTML='<div class="sect"><h3>Cumulative shares</h3><div class="seg" id="m-lmode" role="group" aria-label="Chart"><button type="button" data-m="rank" aria-pressed="true">By income rank</button><button type="button" data-m="share">Tax share against income share</button></div></div><p class="note" id="m-lnote" style="margin:0 0 6px"></p><div class="chart" id="m-lorenz"></div><div class="legend" id="m-lleg"></div>'+
     '<div class="sect"><h3>By group</h3></div>'+tbl+
     (t.history&&t.history.years.length>1?'<div class="sect"><h3>Since '+t.history.years[0]+'</h3></div><div class="chart" id="m-tshist"></div>':'');
   q('#m-meta').innerHTML='<dt>Source</dt><dd>IRS Statistics of Income, <a href="'+esc(t.source_url||'#')+'" target="_blank" rel="noopener">table 4.3</a> for the percentile detail'+(t.history_url?' and <a href="'+esc(t.history_url)+'" target="_blank" rel="noopener">table 4.1</a> for the history':'')+'</dd><dt>Frequency</dt><dd>Annual, by tax year</dd><dt>Last updated</dt><dd>'+esc(t.updated||'')+(t.stale?' <span class="stale">(source unavailable since '+esc(t.stale_since||'today')+')</span>':'')+'</dd><dt>Next release</dt><dd>'+esc(t.next||'')+'</dd>';
