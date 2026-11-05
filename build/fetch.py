@@ -21,6 +21,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from taxlaw import TAXLAW, INCOME_CLASSES, INCOME_CLASSES_YEAR, income_tax, payroll_tax, marginal_rate  # noqa: E402
+import extras  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'data')
@@ -60,7 +61,35 @@ def get(url, params=None, tries=3, timeout=90):
 _meta_cache = {}
 
 
-def fred_obs(sid):
+_resolved = {}
+
+
+def fred_resolve(sid, title=None):
+    """Return a working series id. If sid fails and a title is given, search FRED for the exact title."""
+    if sid in _resolved:
+        return _resolved[sid]
+    if not FRED_KEY or not title:
+        return sid
+    try:
+        r = S.get(f'{FRED}/series', params={'series_id': sid, 'api_key': FRED_KEY, 'file_type': 'json'}, timeout=60)
+        if r.status_code == 200:
+            _resolved[sid] = sid
+            return sid
+    except Exception:  # noqa: BLE001
+        pass
+    j = get(f'{FRED}/series/search', {'search_text': title, 'api_key': FRED_KEY, 'file_type': 'json', 'limit': 50}).json()
+    want = norm(title)
+    hits = [x for x in j.get('seriess', []) if norm(x.get('title')) == want]
+    if not hits:
+        raise RuntimeError(f'FRED {sid} not found and no series titled "{title}"')
+    hits.sort(key=lambda x: (x.get('frequency_short') != 'Q', x.get('frequency_short') != 'M', x.get('id')))
+    log(f'note  FRED id {sid} resolved by title to {hits[0]["id"]}')
+    _resolved[sid] = hits[0]['id']
+    return hits[0]['id']
+
+
+def fred_obs(sid, title=None):
+    sid = fred_resolve(sid, title)
     if FRED_KEY:
         j = get(f'{FRED}/series/observations',
                 {'series_id': sid, 'api_key': FRED_KEY, 'file_type': 'json'}).json()
@@ -255,34 +284,50 @@ def build_fred_comp(cfg):
     src = cfg['source']
     freq = src.get('freq', 'Q')
     per = per_year(freq)
+    scale = float(src.get('scale', 1))
+    titles = src.get('titles', {})
     series = {}
+
+    def load(sid):
+        key = sid.lstrip('-')
+        if key not in series:
+            series[key] = {d: v * scale for d, v in fred_obs(key, titles.get(key))}
+
     for c in cfg['cats']:
         for sid in c.get('series', []):
-            key = sid.lstrip('-')
-            if key not in series:
-                series[key] = dict(fred_obs(key))
-    total_id = src.get('total')
-    if total_id:
-        series[total_id] = dict(fred_obs(total_id))
+            load(sid)
+    total_ids = src.get('total')
+    if isinstance(total_ids, str):
+        total_ids = [total_ids]
+    for sid in total_ids or []:
+        load(sid)
+    memo = src.get('memo')
+    for sid in (memo or {}).get('series', []):
+        load(sid)
+    core = {x.lstrip('-') for c in cfg['cats'] for x in c.get('series', [])} | {x.lstrip('-') for x in total_ids or []}
     dates = None
-    for sid, m in series.items():
-        dates = set(m) if dates is None else dates & set(m)
+    for sid in core:
+        dates = set(series[sid]) if dates is None else dates & set(series[sid])
     dates = sorted(dates)
     if not dates:
         raise RuntimeError('no common dates across the component series')
+
+    def sum_at(ids, d):
+        v = 0.0
+        for sid in ids:
+            sign = -1 if sid.startswith('-') else 1
+            v += sign * series[sid.lstrip('-')][d]
+        return v
 
     def cats_at(d):
         matched, cats = 0.0, []
         for c in cfg['cats']:
             if c.get('residual'):
                 continue
-            v = 0.0
-            for sid in c['series']:
-                sign = -1 if sid.startswith('-') else 1
-                v += sign * series[sid.lstrip('-')][d]
+            v = sum_at(c['series'], d)
             cats.append([c['name'], v])
             matched += v
-        total = series[total_id][d] if total_id else matched
+        total = sum_at(total_ids, d) if total_ids else matched
         for c in cfg['cats']:
             if c.get('residual'):
                 cats.append([c['name'], total - matched])
@@ -296,10 +341,16 @@ def build_fred_comp(cfg):
         cats, _ = cats_at(d)
         for name, v in cats:
             hist[name].append(v)
-    meta = fred_meta(total_id or cfg['cats'][0]['series'][0].lstrip('-'))
+    meta = fred_meta(fred_resolve((total_ids or [cfg['cats'][0]['series'][0]])[0].lstrip('-')))
+    memo_out = None
+    if memo:
+        try:
+            memo_out = {'name': memo['name'], 'value': sum_at(memo['series'], latest), 'net_name': memo.get('net_name')}
+        except KeyError:
+            memo_out = None
     return {
         'snapshot': {'period': period_label(latest, freq), 'total': cur_total, 'prev_total': prev_total,
-                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest},
+                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest, 'memo': memo_out},
         'hist': {'x': [year_frac(d) for d in dates], 'labels': [period_label(d, freq) for d in dates],
                  'cats': [[n, hist[n]] for n in hist], 'gdp': None,
                  'title': f'Since {period_label(dates[0], freq)}'},
@@ -388,8 +439,13 @@ def census_nim():
 def fetch_source(src, freq):
     t = src['type']
     if t == 'fred':
-        obs = apply_transform(fred_obs(src['series']), src, freq)
-        return obs, fred_meta(src['series'])
+        sid = fred_resolve(src['series'], src.get('title'))
+        obs = apply_transform(fred_obs(sid), src, freq)
+        return obs, fred_meta(sid)
+    if t == 'fiscaldata_avg_rate':
+        obs = extras.avg_interest_rate(fiscaldata_all)
+        return obs, {'last_updated': obs[-1][0] + ' 00:00:00-05', 'release_name': 'Average Interest Rates on U.S. Treasury Securities',
+                     'next_text': 'Monthly, a few days after month end'}
     if t == 'ratio':
         num = fred_obs(src['num'])
         dmap = {}
@@ -690,8 +746,12 @@ def main():
         entry['kind'] = 'comp'
         entry['sid'] = cfg.get('sid_override', '')
         try:
-            if cfg.get('source', {}).get('type') == 'fred_comp':
+            stype = cfg.get('source', {}).get('type')
+            if stype == 'fred_comp':
                 entry.update(build_fred_comp(cfg))
+            elif stype == 'tic_mfh':
+                entry.update(extras.build_foreign_holders(S))
+                entry['cats'] = [{'name': n, 'residual': n == 'All other'} for n, _ in entry['snapshot']['cats']]
             else:
                 entry.update(build_comp(cfg, gdp_fy))
             entry['updated'] = fmt_date(entry['last_updated'])
@@ -771,6 +831,8 @@ def main():
             c['next'] = fmt_date(next_by_release[c['release_id']])
         elif c.get('source', {}).get('type') == 'fred_comp':
             c['next'] = c.get('next') or ''
+        elif c.get('source', {}).get('type') == 'tic_mfh':
+            c['next'] = 'Around the 15th of each month, for the month six weeks earlier'
         else:
             c['next'] = 'Around the 8th business day of each month'
 
@@ -779,6 +841,49 @@ def main():
     except Exception as e:  # noqa: BLE001
         dd = prev.get('debt_dynamics', {})
         status['notes'].append(f'debt dynamics: {e}')
+
+    def extra_block(name, fn):
+        try:
+            val = fn()
+            val['stale'] = False
+            val['error'] = None
+            status['ok'].append(name)
+            return val
+        except Exception as e:  # noqa: BLE001
+            err = f'{type(e).__name__}: {e}'
+            log(f'FAIL  {name:14s} {err[:600]}')
+            traceback.print_exc()
+            old = prev.get(name)
+            if old and (old.get('points') or old.get('buckets')):
+                old = dict(old)
+                old['stale'] = True
+                old['error'] = err
+                old['stale_since'] = old.get('stale_since') or fmt_date(TODAY_ET.isoformat())
+                status['stale'][name] = err
+                return old
+            status['failed'][name] = err
+            return {'stale': True, 'error': err}
+
+    maturity = extra_block('maturity', lambda: extras.build_maturity(fiscaldata_all, get, FD, TODAY_ET))
+    if maturity.get('buckets'):
+        maturity['updated'] = fmt_date(maturity.get('last_updated'))
+        maturity['next'] = 'Fourth business day of each month'
+        log(f'ok    maturity       {maturity["total_bn"]:.0f}B marketable as of {maturity["as_of"]}, WAM {maturity["wam_years"]:.2f} yrs, {len(maturity["hist"]["x"])} history points; parse {maturity.get("parse")}')
+        with open(os.path.join(CSVDIR, 'maturity_wall.csv'), 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['maturity_year'] + maturity['wall']['types'])
+            for y, amts in zip(maturity['wall']['years'], maturity['wall']['amounts']):
+                w.writerow([y] + [round(a, 3) for a in amts])
+    taxshares = extra_block('taxshares', lambda: extras.build_income_tax_shares(S, TODAY_ET))
+    if taxshares.get('points'):
+        taxshares['updated'] = f'Tax year {taxshares["year"]}'
+        taxshares['next'] = 'Each year\u2019s table appears about two years after the tax year'
+        log(f'ok    taxshares      tax year {taxshares["year"]}: ' + ', '.join(f'{p["label"]} {p.get("tax_share")}' for p in taxshares['points'][:6]) + (f'; history {len(taxshares["history"]["years"])} years' if taxshares.get('history') else f'; history: {taxshares.get("history_error")}'))
+        with open(os.path.join(CSVDIR, 'income_tax_shares.csv'), 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['group', 'returns', 'agi_floor', 'agi_share_pct', 'income_tax_share_pct', 'avg_tax_rate_pct'])
+            for p in taxshares['points']:
+                w.writerow([p['label'], p.get('returns'), p.get('agi_floor'), p.get('agi_share'), p.get('tax_share'), p.get('avg_rate')])
 
     try:
         tc = tax_curves(out_series, out_comp, fred_obs('CPIAUCSL'))
@@ -799,6 +904,8 @@ def main():
         'releases': releases_week,
         'debt_dynamics': dd,
         'tax_curves': tc,
+        'maturity': maturity,
+        'taxshares': taxshares,
         'week_start': (TODAY_ET - dt.timedelta(days=TODAY_ET.weekday())).isoformat(),
         'today': TODAY_ET.isoformat(),
         'status': {'ok': len(status['ok']), 'stale': list(status['stale']), 'failed': list(status['failed'])},

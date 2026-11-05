@@ -111,6 +111,15 @@ h1{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.15;marg
 .leg-btn i{display:inline-block;width:14px;height:0;border-top:2px solid var(--faint);opacity:.7}
 .leg-btn.cur i{border-top-color:var(--line);opacity:1}
 .mini-cap{font-size:12px;color:var(--faint);margin:0 0 4px}
+.chart .bar{stroke:var(--surface);stroke-width:.5}
+.chart .diag{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;fill:none}
+.chart .ser2{fill:none;stroke:var(--c5);stroke-width:1.6;stroke-linejoin:round}
+.chart .dot2{fill:var(--c5)}
+.ptable{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0 0}
+.ptable th{font-weight:500;color:var(--muted);text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)}
+.ptable th:first-child,.ptable td:first-child{text-align:left}
+.ptable td{text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)}
+.chip.memo{background:none;padding-left:0}
 
 footer{margin:44px 0 40px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;max-width:80ch}
 footer p{margin:0 0 8px}
@@ -228,7 +237,9 @@ var FMT={
   usd0:function(v){return (v<0?minus:'')+'$'+withCommas(v);},
   jobs:function(v){var a=Math.abs(v);return (v<0?minus:'+')+(a>=1000?(a/1000).toFixed(1)+'M':Math.round(a)+'k');},
   millions:function(v){return num(v/1e6,2)+'M';},
-  millions_k:function(v){return num(v/1000,1)+'M';}
+  millions_k:function(v){return num(v/1000,1)+'M';},
+  times100:function(v){return (v/100).toFixed(1)+'\u00d7';},
+  years:function(v){return v.toFixed(1)+' yrs';}
 };
 var SIGNED={
   jobs:FMT.jobs,
@@ -242,7 +253,9 @@ var AXIS={
   usdK:function(v){return '$'+Math.round(v/1000)+'k';},
   jobs:function(v){if(v===0)return '0';var a=Math.abs(v);return (v<0?minus:'')+(a>=1000?(+(a/1000).toFixed(1))+'M':Math.round(a)+'k');},
   millions:function(v){return (+(v/1e6).toFixed(2))+'M';},
-  millions_k:function(v){return (+(v/1000).toFixed(1))+'M';}
+  millions_k:function(v){return (+(v/1000).toFixed(1))+'M';},
+  times100:function(v){return (+(v/100).toFixed(1))+'\u00d7';},
+  years:function(v){return (+v.toFixed(1))+' yrs';}
 };
 function fmtOf(s){return FMT[s.fmt]||FMT.pct1;}
 function axisOf(s){return AXIS[s.axis]||AXIS.pct;}
@@ -343,6 +356,7 @@ var MODE_LABELS={gdp:'% of GDP',usd:'Dollars',share:'Share of total',level:'Leve
 function modeLabel(c,m){return (c.mode_labels&&c.mode_labels[m])||MODE_LABELS[m]||m;}
 function modeFmt(c,mode){if(mode==='gdp'||mode==='share')return function(v){return (+v.toFixed(1))+'%';};if(mode==='usd')return function(v){return Math.abs(v)>=1000?'$'+(+(v/1000).toFixed(2))+'T':'$'+Math.round(v)+'B';};return vfmtOf(c);}
 function modesOf(c){var ms=c.modes||['gdp','usd','share'];if(!(c.hist&&c.hist.gdp))ms=ms.filter(function(m){return m!=='gdp';});return ms;}
+function memoChip(c){var m=c.snapshot&&c.snapshot.memo;if(!m||m.value==null)return '';var vf=vfmtOf(c);return '<span class="chip">less <b>'+vf(m.value)+'</b> '+esc(m.name.toLowerCase())+(m.net_name?' = <b>'+vf(c.snapshot.total-m.value)+'</b> '+esc(m.net_name.toLowerCase()):'')+'</span>';}
 function barsHTML(c,big){
   var cats=c.snapshot.cats,total=c.snapshot.total,max=Math.max.apply(null,cats.map(function(x){return Math.abs(x[1]);})),vf=vfmtOf(c);
   return '<div class="bars'+(big?' big':'')+'">'+cats.map(function(x,k){
@@ -425,6 +439,169 @@ function openCurvesModal(tc,btn){
   q('#m-close').focus();
 }
 
+/* ---------- maturity of marketable debt ---------- */
+function emptyTile(title,msg){var b=document.createElement('button');b.className='tile wide';b.type='button';b.innerHTML='<div class="tile-head"><span class="tile-title">'+esc(title)+'</span></div><p class="empty">'+esc(msg)+'</p>';return b;}
+function bucketBars(m,big){
+  var max=Math.max.apply(null,m.buckets.map(function(b){return b[1];}));
+  return '<div class="bars'+(big?' big':'')+'">'+m.buckets.map(function(b,k){return '<span class="bl">'+esc(b[0])+'</span><span class="bt"><span class="bf" style="width:'+(b[1]/max*100).toFixed(1)+'%;background:'+CAT[k%CAT.length]+'"></span></span><span class="bv">'+(big?bn(b[1])+' <span class="sh">'+b[2].toFixed(0)+'%</span>':b[2].toFixed(0)+'%')+'</span>';}).join('')+'</div>';
+}
+function wallSVG(m,opt){
+  var W=opt.w,H=opt.h,mL=opt.mL,mR=8,mT=opt.mT,mB=opt.mB,wall=m.wall,yrs=wall.years,n=yrs.length;
+  if(!n)return '';
+  var y0=yrs[0],y1=Math.min(yrs[n-1],y0+(opt.maxYears||40)),show=[];
+  for(var i=0;i<n;i++)if(yrs[i]<=y1)show.push(i);
+  var tot=show.map(function(i){return wall.amounts[i].reduce(function(a,b){return a+b;},0);}),top=Math.max.apply(null,tot);
+  var yMax=ticks(0,top*1.05,4).pop()||top;if(yMax<top)yMax=top*1.05;
+  var X=function(y){return mL+(y-y0)/(y1-y0+1)*(W-mL-mR);},Y=function(v){return mT+(yMax-v)/yMax*(H-mT-mB);},bw=(W-mL-mR)/(y1-y0+1);
+  var g='',tk=opt.fs?'font-size="'+opt.fs+'" fill="var(--faint)"':'class="tick"';
+  ticks(0,yMax,4).forEach(function(v){var yy=Y(v);g+='<line x1="'+mL+'" x2="'+(W-mR)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/><text '+tk+' x="'+(mL-6)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end">'+esc(AXIS.usdT(v/1000))+'</text>';});
+  show.forEach(function(i){var cum=0;wall.amounts[i].forEach(function(a,k){if(a<=0)return;var ya=Y(cum+a),yb=Y(cum);g+='<rect class="bar" data-i="'+i+'" x="'+(X(yrs[i])+bw*0.1).toFixed(1)+'" y="'+ya.toFixed(1)+'" width="'+(bw*0.8).toFixed(1)+'" height="'+Math.max(0.5,yb-ya).toFixed(1)+'" fill="'+CAT[k%CAT.length]+'"/>';cum+=a;});});
+  var step=(y1-y0)>25?10:5;
+  for(var y=Math.ceil(y0/step)*step;y<=y1;y+=step)g+='<text '+tk+' x="'+(X(y)+bw/2).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="middle">'+y+'</text>';
+  return {svg:g,X:X,Y:Y,bw:bw,show:show,y0:y0,y1:y1,tot:tot,W:W,H:H,mL:mL,mR:mR,mT:mT,mB:mB};
+}
+function maturityTile(m){
+  if(!m.buckets)return emptyTile('Maturity of marketable debt','Not available yet. The source could not be read on the last run.');
+  var b=document.createElement('button');b.className='tile wide';b.type='button';b.setAttribute('aria-haspopup','dialog');
+  var r=wallSVG(m,{w:300,h:100,mL:34,mT:8,mB:18,fs:10.5,maxYears:30});
+  var foot=m.stale?'<span class="stale">Source unavailable since '+esc(m.stale_since||'today')+'; showing older data</span>':'<span>Updated '+esc(m.updated||'')+'</span>';
+  b.innerHTML='<div class="tile-head"><span class="tile-title">Maturity of marketable debt</span><span class="tile-period">'+esc(periodLabel(m.as_of,{freq:'M'}))+'</span></div>'+
+    '<div class="tile-value"><span class="num">'+bn(m.total_bn)+'</span><span class="chips"><span class="chip"><b>'+m.wam_years.toFixed(1)+' yrs</b> average maturity</span><span class="chip"><b>'+m.share_1y.toFixed(0)+'%</b> due within a year</span>'+(m.avg_coupon_pct!=null?'<span class="chip"><b>'+m.avg_coupon_pct.toFixed(2)+'%</b> average coupon, excluding bills</span>':'')+'</span></div>'+
+    '<div class="comp-body">'+bucketBars(m,false)+'<div class="mini"><div class="mini-cap">Amount maturing each year, next 30 years</div><svg viewBox="0 0 300 100" aria-hidden="true">'+r.svg+'</svg></div></div>'+
+    '<div class="tile-foot"><span>Treasury, Monthly Statement of the Public Debt</span>'+foot+'</div>';
+  b.addEventListener('click',function(){openMaturityModal(m,b);});
+  return b;
+}
+function renderWall(el,m){
+  var w=el.clientWidth||640,h=Math.round(Math.max(240,Math.min(380,w*0.4)));
+  var r=wallSVG(m,{w:w,h:h,mL:52,mT:14,mB:26,maxYears:40});
+  var g=r.svg+'<rect class="cap" x="'+r.mL+'" y="'+r.mT+'" width="'+(w-r.mL-r.mR)+'" height="'+(h-r.mT-r.mB)+'" fill="transparent"/>';
+  el.innerHTML='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Marketable Treasury debt maturing by year">'+g+'</svg><div class="tt"></div>';
+  var svg=el.firstChild,cap=svg.querySelector('.cap'),tt=el.querySelector('.tt');
+  function show(ev){
+    var rb=svg.getBoundingClientRect(),x=(ev.clientX-rb.left)*(w/rb.width),y=Math.floor(r.y0+(x-r.mL)/(w-r.mL-r.mR)*(r.y1-r.y0+1));
+    var i=m.wall.years.indexOf(y);if(i<0){tt.style.display='none';return;}
+    var rows='<b>Maturing in '+y+'</b>';
+    m.wall.types.forEach(function(t,k){var a=m.wall.amounts[i][k];if(a>0)rows+='<div><i style="background:'+CAT[k%CAT.length]+'"></i>'+esc(t)+' <b>'+bn(a)+'</b></div>';});
+    rows+='<div class="tot">Total <b>'+bn(m.wall.amounts[i].reduce(function(a,b){return a+b;},0))+'</b></div>';
+    tt.innerHTML=rows;tt.style.display='block';var px=(r.X(y)+r.bw/2)/w*rb.width,left=px+12;if(left+tt.offsetWidth>rb.width)left=px-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
+  }
+  cap.addEventListener('pointermove',show);cap.addEventListener('pointerdown',show);cap.addEventListener('pointerleave',function(){tt.style.display='none';});
+}
+function histSeries(x,labels,vals,fmt,axis,title){
+  var obs=[];x.forEach(function(xv,i){if(vals[i]==null)return;var y=Math.floor(xv),m=Math.min(12,Math.max(1,Math.round((xv-y)*12)+1));obs.push([y+'-'+(m<10?'0':'')+m+'-01',vals[i]]);});
+  return {kind:'rate',freq:'A',fmt:fmt,axis:axis,title:title,obs:obs,labels:labels};
+}
+function drawMaturity(m){
+  if(q('#m-wall'))renderWall(q('#m-wall'),m);
+  if(q('#m-wam')&&m.hist&&m.hist.x.length>1)renderChart(q('#m-wam'),histSeries(m.hist.x,m.hist.labels,m.hist.wam,'years','years','Average maturity'),{range:null,log:false});
+  if(q('#m-bshare')&&m.hist&&m.hist.x.length>1){
+    var c={title:'Share of marketable debt by remaining maturity',cats:m.hist.bucket_labels.map(function(l){return {name:l};}),hist:{x:m.hist.x,labels:m.hist.labels,cats:m.hist.bucket_labels.map(function(l,k){return [l,m.hist.bucket_share.map(function(row){return row[k];})];}),gdp:null}};
+    renderStacked(q('#m-bshare'),c,'share');
+  }
+}
+function openMaturityModal(m,btn){
+  current={kind:'maturity',m:m};opener=btn;
+  q('#m-title').textContent='Maturity of marketable debt';
+  q('#m-sub').textContent='Bills, notes, bonds, TIPS, and floating rate notes outstanding, by remaining maturity';
+  q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
+  q('#m-num').textContent=bn(m.total_bn);q('#m-period').textContent=periodLabel(m.as_of,{freq:'M'});
+  q('#m-chips').className='chips';q('#m-chips').innerHTML='<span class="chip"><b>'+m.wam_years.toFixed(2)+' yrs</b> weighted average maturity</span><span class="chip"><b>'+m.share_1y.toFixed(1)+'%</b> matures within a year</span><span class="chip"><b>'+m.bills_share.toFixed(1)+'%</b> bills</span>';
+  var types='<table class="ptable"><tr><th>Type</th><th>Outstanding</th><th>Share</th><th>Average maturity</th><th>Average coupon</th></tr>'+m.types.map(function(t){return '<tr><td>'+esc(t[0])+'</td><td>'+bn(t[1])+'</td><td>'+(t[1]/m.total_bn*100).toFixed(1)+'%</td><td>'+t[2].toFixed(1)+' yrs</td><td>'+(t[3]!=null?t[3].toFixed(2)+'%':'\u2014')+'</td></tr>';}).join('')+'</table>';
+  q('#m-comp').innerHTML='<div class="sect"><h3>By remaining maturity</h3></div>'+bucketBars(m,true)+
+    '<div class="sect"><h3>Maturing each year</h3></div><div class="chart" id="m-wall"></div><div class="legend">'+m.wall.types.map(function(t,k){return '<span><i style="background:'+CAT[k%CAT.length]+'"></i>'+esc(t)+'</span>';}).join('')+'</div>'+
+    '<div class="sect"><h3>By type</h3></div>'+types+
+    (m.hist&&m.hist.x.length>1?'<div class="sect"><h3>Average maturity since '+esc(m.hist.labels[0])+'</h3></div><div class="chart" id="m-wam"></div>'+
+    '<div class="sect"><h3>Share by remaining maturity since '+esc(m.hist.labels[0])+'</h3></div><div class="chart" id="m-bshare"></div><div class="legend">'+m.hist.bucket_labels.map(function(l,k){return '<span><i style="background:'+CAT[k%CAT.length]+'"></i>'+esc(l)+'</span>';}).join('')+'</div>':'');
+  q('#m-meta').innerHTML='<dt>Source</dt><dd>Treasury, <a href="'+esc(m.source_url||'#')+'" target="_blank" rel="noopener">Monthly Statement of the Public Debt</a>, table 3, every marketable security outstanding with its maturity date</dd><dt>Frequency</dt><dd>Monthly; the history uses each December</dd><dt>Last updated</dt><dd>'+esc(m.updated||'')+(m.stale?' <span class="stale">(source unavailable since '+esc(m.stale_since||'today')+')</span>':'')+'</dd><dt>Next release</dt><dd>'+esc(m.next||'')+'</dd>';
+  q('#m-note').textContent='Marketable debt only, about four fifths of debt held by the public; savings bonds, state and local government series, and the trust funds\u2019 special issues have no market maturity structure. Amounts are par value, with TIPS at inflation-adjusted principal. Average coupon leaves out bills, which are sold at a discount rather than with a coupon; the separate tile gives the Treasury\u2019s average interest rate across all marketable debt including bills.';q('#m-note').style.display='';
+  q('#m-err').textContent=m.error?'Last fetch error: '+m.error:'';q('#m-err').style.display=m.error?'':'none';
+  var md=q('#modal');md.hidden=false;document.body.style.overflow='hidden';
+  drawMaturity(m);q('#m-close').focus();
+}
+
+/* ---------- who pays the income tax ---------- */
+function lorenzPoints(t,key){
+  var pts=[];
+  t.points.forEach(function(p){var v=p[key];if(v==null)return;if(p.kind==='top')pts.push({x:p.pct,y:v,label:p.label});else if(p.kind==='bottom')pts.push({x:100-p.pct,y:100-v,label:'Top '+(100-p.pct)+'% (from the bottom '+p.pct+'%)'});});
+  pts.sort(function(a,b){return a.x-b.x;});
+  var seen={},out=[];pts.forEach(function(p){if(!seen[p.x]){seen[p.x]=1;out.push(p);}});
+  if(!out.length||out[out.length-1].x<100)out.push({x:100,y:100,label:'All returns'});
+  return out;
+}
+function lorenzSVG(t,opt){
+  var W=opt.w,H=opt.h,mL=opt.mL,mR=10,mT=opt.mT,mB=opt.mB;
+  var tax=lorenzPoints(t,'tax_share'),agi=lorenzPoints(t,'agi_share');
+  var x0=Math.log10(Math.min(tax[0].x,0.01)),x1=2;
+  var X=function(x){return mL+(Math.log10(x)-x0)/(x1-x0)*(W-mL-mR);},Y=function(v){return mT+(100-v)/100*(H-mT-mB);};
+  var g='',tk=opt.fs?'font-size="'+opt.fs+'" fill="var(--faint)"':'class="tick"';
+  [0,25,50,75,100].forEach(function(v){var yy=Y(v);g+='<line x1="'+mL+'" x2="'+(W-mR)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/><text '+tk+' x="'+(mL-6)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end">'+v+'%</text>';});
+  [0.01,0.1,1,10,100].forEach(function(x){if(Math.log10(x)<x0-1e-9)return;g+='<text '+tk+' x="'+X(x).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="middle">top '+x+'%</text>';});
+  var path=function(pts){return pts.map(function(p,i){return (i?'L':'M')+X(p.x).toFixed(1)+' '+Y(p.y).toFixed(1);}).join('');};
+  g+='<path class="diag" d="'+path(tax.map(function(p){return {x:p.x,y:p.x};}))+'"/>';
+  g+='<path class="ser2" d="'+path(agi)+'"/><path class="cur" d="'+path(tax)+'"/>';
+  tax.forEach(function(p){g+='<circle class="last" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
+  agi.forEach(function(p){g+='<circle class="dot2" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(opt.fs?2.2:3)+'"/>';});
+  return {svg:g,X:X,Y:Y,tax:tax,agi:agi,W:W,H:H,mL:mL,mR:mR,mT:mT,mB:mB,x0:x0,x1:x1};
+}
+function shareOf(t,pct,key){for(var i=0;i<t.points.length;i++){var p=t.points[i];if(p.kind==='top'&&Math.abs(p.pct-pct)<1e-9)return p[key];}return null;}
+function taxsharesTile(t){
+  if(!t.points)return emptyTile('Who pays the income tax','Not available yet. The source could not be read on the last run.');
+  var b=document.createElement('button');b.className='tile wide';b.type='button';b.setAttribute('aria-haspopup','dialog');
+  var r=lorenzSVG(t,{w:600,h:200,mL:40,mT:8,mB:22,fs:12});
+  var chips=[[1,'top 1%'],[10,'top 10%'],[50,'top half']].map(function(c){var v=shareOf(t,c[0],'tax_share');return v==null?'':'<span class="chip"><b>'+v.toFixed(0)+'%</b> paid by the '+c[1]+'</span>';}).join('');
+  var foot=t.stale?'<span class="stale">Source unavailable since '+esc(t.stale_since||'today')+'; showing older data</span>':'<span>'+esc(t.updated||'')+'</span>';
+  b.innerHTML='<div class="tile-head"><span class="tile-title">Who pays the income tax</span><span class="tile-period">Tax year '+t.year+'</span></div>'+
+    '<div class="tile-value"><span class="chips">'+chips+'</span></div>'+
+    '<div class="curves-wrap chart"><div class="mini-cap">Cumulative share of all federal income tax (color) and of all adjusted gross income (green) accounted for by the richest returns, on a log scale; dashed is an equal share</div><svg viewBox="0 0 600 200" aria-hidden="true">'+r.svg+'</svg></div>'+
+    '<div class="tile-foot"><span>IRS Statistics of Income, returns ranked by AGI</span>'+foot+'</div>';
+  b.addEventListener('click',function(){openTaxsharesModal(t,b);});
+  return b;
+}
+function renderLorenz(el,t){
+  var w=el.clientWidth||640,h=Math.round(Math.max(260,Math.min(420,w*0.45)));
+  var r=lorenzSVG(t,{w:w,h:h,mL:48,mT:14,mB:26});
+  var g=r.svg+'<line class="xh" style="display:none" y1="'+r.mT+'" y2="'+(h-r.mB)+'"/><rect class="cap" x="'+r.mL+'" y="'+r.mT+'" width="'+(w-r.mL-r.mR)+'" height="'+(h-r.mT-r.mB)+'" fill="transparent"/>';
+  el.innerHTML='<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Cumulative share of income tax and income by percentile">'+g+'</svg><div class="tt"></div>';
+  var svg=el.firstChild,xh=svg.querySelector('.xh'),cap=svg.querySelector('.cap'),tt=el.querySelector('.tt');
+  function show(ev){
+    var rb=svg.getBoundingClientRect(),x=(ev.clientX-rb.left)*(w/rb.width),lx=r.x0+(x-r.mL)/(w-r.mL-r.mR)*(r.x1-r.x0);
+    var i=0;for(var k=1;k<r.tax.length;k++)if(Math.abs(Math.log10(r.tax[k].x)-lx)<Math.abs(Math.log10(r.tax[i].x)-lx))i=k;
+    var p=r.tax[i],px=r.X(p.x);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
+    var a=null;for(var j=0;j<r.agi.length;j++)if(r.agi[j].x===p.x)a=r.agi[j];
+    var pt=null;for(j=0;j<t.points.length;j++)if(t.points[j].kind==='top'&&t.points[j].pct===p.x)pt=t.points[j];
+    tt.innerHTML='<b>'+esc(p.label)+'</b><div>'+p.y.toFixed(1)+'% of income tax'+(a?', '+a.y.toFixed(1)+'% of AGI':'')+'</div>'+(pt&&pt.agi_floor?'<div>AGI above $'+withCommas(pt.agi_floor)+(pt.avg_rate!=null?', average rate '+pt.avg_rate.toFixed(1)+'%':'')+'</div>':'');
+    tt.style.display='block';var left=px/w*rb.width+12;if(left+tt.offsetWidth>rb.width)left=px/w*rb.width-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
+  }
+  cap.addEventListener('pointermove',show);cap.addEventListener('pointerdown',show);cap.addEventListener('pointerleave',function(){xh.style.display='none';tt.style.display='none';});
+}
+function drawTaxshares(t){
+  if(q('#m-lorenz'))renderLorenz(q('#m-lorenz'),t);
+  if(q('#m-tshist')&&t.history&&t.history.years.length>1){
+    var H=t.history,pick=[['top',1],['top',10],['bottom',50]],lines=[];
+    pick.forEach(function(pk){H.groups.forEach(function(g){if(g.kind===pk[0]&&Math.abs(g.pct-pk[1])<1e-9){var obs=[];H.years.forEach(function(y,i){if(g.tax_share[i]!=null)obs.push([y+'-01-01',g.tax_share[i]]);});if(obs.length)lines.push({label:g.label+', share of income tax',obs:obs});var obs2=[];H.years.forEach(function(y,i){if(g.agi_share[i]!=null)obs2.push([y+'-01-01',g.agi_share[i]]);});if(obs2.length)lines.push({label:g.label+', share of AGI',obs:obs2});}});});
+    if(lines.length)renderChart(q('#m-tshist'),{kind:'multi',freq:'A',fmt:'pct1',axis:'pct',title:'Shares over time',lines:lines,obs:lines[0].obs},{range:null,log:false});
+  }
+}
+function openTaxsharesModal(t,btn){
+  current={kind:'taxshares',t:t};opener=btn;
+  q('#m-title').textContent='Who pays the federal income tax';
+  q('#m-sub').textContent='Returns ranked by adjusted gross income; cumulative shares of all AGI and of all income tax after credits, tax year '+t.year;
+  q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
+  q('#m-num').textContent='';q('#m-period').textContent='';q('#m-chips').className='chips';
+  var top1=shareOf(t,1,'tax_share'),top1a=shareOf(t,1,'agi_share');
+  q('#m-chips').innerHTML=(top1!=null?'<span class="chip">Top 1% earned <b>'+top1a.toFixed(1)+'%</b> of AGI and paid <b>'+top1.toFixed(1)+'%</b> of income tax</span>':'');
+  var tbl='<table class="ptable"><tr><th>Group</th><th>AGI above</th><th>Share of AGI</th><th>Share of income tax</th><th>Average tax rate</th></tr>'+t.points.map(function(p){return '<tr><td>'+esc(p.label)+'</td><td>'+(p.agi_floor?'$'+withCommas(p.agi_floor):'\u2014')+'</td><td>'+(p.agi_share!=null?p.agi_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.tax_share!=null?p.tax_share.toFixed(1)+'%':'\u2014')+'</td><td>'+(p.avg_rate!=null?p.avg_rate.toFixed(1)+'%':'\u2014')+'</td></tr>';}).join('')+'</table>';
+  q('#m-comp').innerHTML='<div class="sect"><h3>Cumulative shares, richest returns first</h3></div><div class="chart" id="m-lorenz"></div><div class="legend"><span><i style="border-top:2px solid var(--line);width:14px;height:0;display:inline-block"></i>Share of income tax</span><span><i style="border-top:2px solid var(--c5);width:14px;height:0;display:inline-block"></i>Share of AGI</span><span><i style="border-top:1px dashed var(--faint);width:14px;height:0;display:inline-block"></i>Equal shares</span></div>'+
+    '<div class="sect"><h3>By group</h3></div>'+tbl+
+    (t.history&&t.history.years.length>1?'<div class="sect"><h3>Since '+t.history.years[0]+'</h3></div><div class="chart" id="m-tshist"></div>':'');
+  q('#m-meta').innerHTML='<dt>Source</dt><dd>IRS Statistics of Income, <a href="'+esc(t.source_url||'#')+'" target="_blank" rel="noopener">table 4.3</a> for the percentile detail'+(t.history_url?' and <a href="'+esc(t.history_url)+'" target="_blank" rel="noopener">table 4.1</a> for the history':'')+'</dd><dt>Frequency</dt><dd>Annual, by tax year</dd><dt>Last updated</dt><dd>'+esc(t.updated||'')+(t.stale?' <span class="stale">(source unavailable since '+esc(t.stale_since||'today')+')</span>':'')+'</dd><dt>Next release</dt><dd>'+esc(t.next||'')+'</dd>';
+  q('#m-note').textContent='Individual income tax only, which is about half of federal revenue; payroll taxes, which fall mostly on the bottom and middle, are excluded, as are corporate and excise taxes. Returns are ranked by AGI, so the groups are tax units rather than households, dependents\u2019 returns are excluded, and a filer with a loss year can land near the bottom despite high wealth. Income tax is after credits, so refundable credits can push the bottom group\u2019s share below zero.';q('#m-note').style.display='';
+  q('#m-err').textContent=t.error?'Last fetch error: '+t.error:(t.history_error?'History not loaded: '+t.history_error:'');q('#m-err').style.display=(t.error||t.history_error)?'':'none';
+  var md=q('#modal');md.hidden=false;document.body.style.overflow='hidden';
+  drawTaxshares(t);q('#m-close').focus();
+}
+
 /* ---------- page ---------- */
 function buildBrief(){
   var g=byId('gdp_growth'),u=byId('unrate'),c=byId('cpi'),b=byId('balance'),d=byId('debt_gdp'),parts=[];
@@ -449,6 +626,7 @@ function tile(s){
       h='<div class="tile-head"><span class="tile-title">'+esc(s.title)+'</span></div><p class="empty">Not available yet. The source could not be read on the last run; click for details.</p>';
     }else{
       var sn=s.snapshot,chip=sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'';
+      chip+=memoChip(s);
       h='<div class="tile-head"><span class="tile-title">'+esc(s.title)+'</span><span class="tile-period">'+esc(sn.period)+'</span></div>'+
         '<div class="tile-value"><span class="num">'+vfmtOf(s)(sn.total)+'</span><span class="chips">'+chip+'</span></div>'+
         '<div class="comp-body">'+barsHTML(s,false)+'<div class="mini">'+(s.hist&&s.hist.x&&s.hist.x.length>1?miniStackedSVG(s):'')+'</div></div>'+
@@ -486,15 +664,18 @@ function build(dash){
     q('#releases').innerHTML=order.map(function(d){var cls=d===dash.today?' class="today"':d<dash.today?' class="past"':'';return '<li'+cls+'><span class="rel-day">'+esc(dayLabel(d))+'</span><span class="rel-items">'+days[d].map(function(nm){return '<span>'+esc(nm)+'</span>';}).join('')+'</span></li>';}).join('');
   }
   var main=q('#groups');main.innerHTML='';
-  var all=dash.series.concat(dash.comp||[]);
+  var all=dash.series.concat(dash.comp||[]).map(function(s,i){return {s:s,o:s.order==null?50:s.order,i:i,make:function(){return tile(s);}};});
+  var n0=all.length;
+  if(dash.taxshares&&(dash.taxshares.points||dash.taxshares.error))all.push({s:{group:'fiscal'},o:60,i:n0++,make:function(){return taxsharesTile(dash.taxshares);}});
+  if(dash.tax_curves&&dash.tax_curves.curves&&dash.tax_curves.curves.length)all.push({s:{group:'fiscal'},o:70,i:n0++,make:function(){return curvesTile(dash.tax_curves);}});
+  if(dash.maturity&&(dash.maturity.buckets||dash.maturity.error))all.push({s:{group:'debt'},o:35,i:n0++,make:function(){return maturityTile(dash.maturity);}});
   dash.groups.forEach(function(gr){
-    var items=all.filter(function(s){return s.group===gr.id;});
+    var items=all.filter(function(x){return x.s.group===gr.id;}).sort(function(a,b){return a.o-b.o||a.i-b.i;});
     if(!items.length)return;
     var sec=document.createElement('section');sec.className='group';
     sec.innerHTML='<h2>'+esc(gr.title)+'</h2><p class="gdesc">'+esc(gr.desc||'')+'</p>';
     var grid=document.createElement('div');grid.className='grid';
-    items.forEach(function(s){grid.appendChild(tile(s));});
-    if(gr.id==='fiscal'&&dash.tax_curves&&dash.tax_curves.curves&&dash.tax_curves.curves.length)grid.appendChild(curvesTile(dash.tax_curves));
+    items.forEach(function(x){grid.appendChild(x.make());});
     sec.appendChild(grid);main.appendChild(sec);
   });
 }
@@ -594,6 +775,8 @@ var RANGES=[['10y',10],['25y',25],['50y',50],['Max',null]];
 function draw(){
   if(!current)return;
   if(current.kind==='curves'){if(q('#m-curves'))renderCurves(q('#m-curves'),current.tc);}
+  else if(current.kind==='maturity'){drawMaturity(current.m);}
+  else if(current.kind==='taxshares'){drawTaxshares(current.t);}
   else if(current.kind==='comp'){if(current.hist&&q('#m-stacked'))renderStacked(q('#m-stacked'),current,state.mode);}
   else if(current.obs&&current.obs.length)renderChart(q('#m-chart'),current,state);
 }
@@ -614,7 +797,7 @@ function openModal(s,btn){
   if(comp&&has){
     var sn=s.snapshot;
     q('#m-num').textContent=vfmtOf(s)(sn.total);q('#m-period').textContent=sn.period;
-    q('#m-chips').innerHTML=sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'';
+    q('#m-chips').innerHTML=(sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'')+memoChip(s);
     q('#m-comp').innerHTML='<div class="sect"><h3>'+esc(sn.period)+'</h3></div>'+barsHTML(s,true)+
       (s.hist&&s.hist.x&&s.hist.x.length?'<div class="sect"><h3>'+esc(s.hist.title||'History')+'</h3><div class="seg" id="m-mode" role="group" aria-label="Units">'+modes.map(function(m){return '<button type="button" data-m="'+m+'" aria-pressed="'+(m===state.mode)+'">'+esc(modeLabel(s,m))+'</button>';}).join('')+'</div></div>'+
       '<div class="chart" id="m-stacked"></div>'+

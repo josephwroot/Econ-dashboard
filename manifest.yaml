@@ -15,7 +15,8 @@ groups:
   - {id: labor,       title: Labor,              desc: "Jobs and participation"}
   - {id: prices,      title: "Prices and rates", desc: "Inflation and the cost of money"}
   - {id: fiscal,      title: Fiscal,             desc: "Debt, deficits, and where the money goes"}
-  - {id: household,   title: Household,          desc: "How the median household is doing"}
+  - {id: debt,        title: "The debt in detail", desc: "Who holds it, and when it comes due"}
+  - {id: household,   title: Household,          desc: "Income and wealth"}
   - {id: immigration, title: Immigration,        desc: "Flows and the foreign-born workforce"}
 
 series:
@@ -257,6 +258,51 @@ series:
     freq_label: Daily since April 1993, shown at month ends; quarterly before that
     note: Gross debt, including intragovernmental holdings.
 
+  - id: avg_rate
+    group: debt
+    order: 40
+    title: Average interest rate on marketable debt
+    sub: Weighted across all outstanding bills, notes, bonds, TIPS, and FRNs
+    kind: rate
+    freq: M
+    fmt: pct2
+    axis: pct
+    dec: 2
+    source: {type: fiscaldata_avg_rate}
+    src_label: Treasury FiscalData
+    sid_override: Average Interest Rates on U.S. Treasury Securities
+    url: https://fiscaldata.treasury.gov/datasets/average-interest-rates-treasury-securities/
+    freq_label: Monthly
+    note: The rate the Treasury is paying on the stock of marketable debt, so it moves slowly as old securities roll off and new ones are issued at current yields. This is the number the debt-dynamics page calls the effective rate.
+
+  - id: hh_networth
+    group: household
+    order: 60
+    title: Household net worth
+    sub: Households and nonprofit organizations, assets less liabilities
+    kind: level
+    freq: Q
+    fmt: usdT
+    axis: usdT
+    source: {type: fred, series: TNWBSHNO, transform: scale, factor: 0.000001, title: "Households and Nonprofit Organizations; Net Worth, Level"}
+    src_label: Federal Reserve Z.1 via FRED
+    freq_label: Quarterly, end of period
+    note: Market value of real estate, equities, pensions, deposits, and other assets, less mortgages and consumer credit. Nominal; use the log scale to read growth off the slope.
+
+  - id: nw_to_income
+    group: household
+    order: 61
+    title: Net worth relative to income
+    sub: Household net worth as a multiple of annual disposable income
+    kind: level
+    freq: Q
+    fmt: times100
+    axis: times100
+    source: {type: fred, series: HNONWPDPI, title: "Households and Nonprofit Organizations; Net Worth as a Percentage of Disposable Personal Income, Level"}
+    src_label: Federal Reserve Z.1 via FRED
+    freq_label: Quarterly
+    note: Hovered near five times income from the 1950s through the 1990s and has climbed since, driven by house and stock prices rather than saving.
+
   - id: med_income
     group: household
     title: Real median family income
@@ -427,6 +473,140 @@ comp:
     cats:
       - {name: Men, series: [LNS11000001]}
       - {name: Women, series: [LNS11000002]}
+
+  - id: debt_holders
+    group: debt
+    order: 10
+    title: Who holds the federal debt
+    sub: Total public debt by holder
+    source:
+      type: fred_comp
+      freq: Q
+      titles:
+        FDHBFRBN: "Federal Debt Held by Federal Reserve Banks"
+        FDHBATN: "Federal Debt Held by Agencies and Trusts"
+        FDHBFIN: "Federal Debt Held by Foreign and International Investors"
+        FDHBPIN: "Federal Debt Held by Private Investors"
+    vfmt: usd_bn
+    modes: [share, usd]
+    src_label: Treasury Bulletin via FRED
+    sid_override: FDHBFRBN, FDHBATN, FDHBFIN, FDHBPIN
+    url: https://fred.stlouisfed.org/series/FDHBFIN
+    freq_label: Quarterly, par value, end of quarter
+    note: Government accounts are mostly the Social Security and federal retirement trust funds, which hold special nonmarketable securities; that part of the debt is the government owing itself. Foreign holdings are from the Treasury International Capital surveys and are attributed by custodian country, so they understate some countries and overstate financial centers.
+    cats:
+      - {name: Domestic private investors, series: [FDHBPIN, -FDHBFIN]}
+      - {name: Foreign and international, series: [FDHBFIN]}
+      - {name: Federal Reserve, series: [FDHBFRBN]}
+      - {name: Government accounts and trust funds, series: [FDHBATN]}
+
+  - id: debt_holders_detail
+    group: debt
+    order: 20
+    title: Holders of the debt held by the public
+    sub: Treasury securities outstanding by sector, Financial Accounts table L.210
+    source:
+      type: fred_comp
+      freq: Q
+      scale: 0.001
+      total: [BOGZ1FL313161105Q]
+      titles:
+        BOGZ1FL313161105Q: "Federal Government; Treasury Securities; Liability, Level"
+        BOGZ1LM713061103Q: "Monetary Authority; Treasury Securities; Asset, Level"
+        BOGZ1LM263061105Q: "Rest of the World; Treasury Securities; Asset, Level"
+        BOGZ1LM153061105Q: "Households and Nonprofit Organizations; Treasury Securities; Asset, Level"
+        BOGZ1FL633061105Q: "Money Market Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM653061105Q: "Mutual Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM563061103Q: "Exchange-Traded Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM763061100Q: "U.S.-Chartered Depository Institutions; Treasury Securities; Asset, Level"
+        BOGZ1LM753061103Q: "Foreign Banking Offices in U.S.; Treasury Securities; Asset, Level"
+        BOGZ1LM473061105Q: "Credit Unions; Treasury Securities; Asset, Level"
+        BOGZ1LM573061105Q: "Private Pension Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM223061143Q: "State and Local Government Employee Defined Benefit Retirement Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM343061105Q: "Federal Government Retirement Funds; Treasury Securities; Asset, Level"
+        BOGZ1LM513061105Q: "Property-Casualty Insurance Companies; Treasury Securities; Asset, Level"
+        BOGZ1LM543061105Q: "Life Insurance Companies; Treasury Securities; Asset, Level"
+        BOGZ1LM213061103Q: "State and Local Governments; Treasury Securities, Excluding SLGS; Asset, Level"
+    vfmt: usd_bn
+    modes: [share, usd]
+    src_label: Federal Reserve Z.1 via FRED
+    sid_override: Z.1 table L.210
+    url: https://www.federalreserve.gov/releases/z1/
+    freq_label: Quarterly, mostly market value
+    note: Debt held by the public only; the trust funds are excluded. Households include domestic hedge funds, which is where much of the recent growth sits. Everything else covers businesses, government-sponsored enterprises, dealers, holding companies, and the statistical discrepancy between the Treasury's liability and the sum of reported holdings.
+    cats:
+      - {name: Foreign, series: [BOGZ1LM263061105Q]}
+      - {name: Federal Reserve, series: [BOGZ1LM713061103Q]}
+      - {name: Households and hedge funds, series: [BOGZ1LM153061105Q]}
+      - {name: Money market funds, series: [BOGZ1FL633061105Q]}
+      - {name: Mutual funds and ETFs, series: [BOGZ1LM653061105Q, BOGZ1LM563061103Q]}
+      - {name: Banks and credit unions, series: [BOGZ1LM763061100Q, BOGZ1LM753061103Q, BOGZ1LM473061105Q]}
+      - {name: Pensions and insurers, series: [BOGZ1LM573061105Q, BOGZ1LM223061143Q, BOGZ1LM343061105Q, BOGZ1LM513061105Q, BOGZ1LM543061105Q]}
+      - {name: State and local governments, series: [BOGZ1LM213061103Q]}
+      - {name: Everything else, residual: true}
+
+  - id: foreign_holders
+    group: debt
+    order: 30
+    title: Foreign holders by country
+    sub: Major foreign holders of Treasury securities
+    source: {type: tic_mfh}
+    vfmt: usd_bn
+    modes: [usd, share]
+    src_label: Treasury International Capital system
+    sid_override: Major Foreign Holders table
+    url: https://ticdata.treasury.gov/Publish/mfh.txt
+    freq_label: Monthly, with a six-week lag
+    note: Holdings are attributed to the country of the custodian, not the owner, so Belgium, Luxembourg, the Cayman Islands, and Ireland are large mainly as financial centers. Includes both official and private holders.
+
+  - id: wealth_assets
+    group: household
+    order: 70
+    title: What households own
+    sub: Total household assets by type, Distributional Financial Accounts
+    source:
+      type: fred_comp
+      freq: Q
+      scale: 0.001
+      total: [WFRBLT01000, WFRBLN09027, WFRBLN40054, WFRBLB50081]
+      memo: {name: Liabilities, net_name: Net worth, series: [WFRBLT01019, WFRBLN09046, WFRBLN40073, WFRBLB50100]}
+    vfmt: usd_bn
+    modes: [share, usd]
+    src_label: Federal Reserve DFA via FRED
+    sid_override: Distributional Financial Accounts
+    url: https://fred.stlouisfed.org/release/tables?rid=453&eid=813668
+    freq_label: Quarterly, since 1989
+    note: Sums across the four wealth groups of the Distributional Financial Accounts, which allocate the aggregate Financial Accounts across households using the Survey of Consumer Finances. Private businesses and other includes equity in noncorporate business, life insurance reserves, annuities, and miscellaneous assets.
+    cats:
+      - {name: Real estate, series: [WFRBLT01002, WFRBLN09029, WFRBLN40056, WFRBLB50083]}
+      - {name: Stocks and mutual funds, series: [WFRBLT01014, WFRBLN09041, WFRBLN40068, WFRBLB50095]}
+      - {name: Pensions, series: [WFRBLTOP1DCP, WFRBLDCPN09, WFRBLDCPN40, WFRBLDCPB50, WFRBLTOP1DBP, WFRBLDBPN09, WFRBLDBPN40, WFRBLDBPB50]}
+      - {name: Deposits and money market funds, series: [WFRBLTOP1DE, WFRBLDEN09, WFRBLDEN40, WFRBLDEB50, WFRBLT01007, WFRBLN09034, WFRBLN40061, WFRBLB50088]}
+      - {name: Bonds, series: [WFRBLT01008, WFRBLN09035, WFRBLN40062, WFRBLB50089]}
+      - {name: Consumer durables, series: [WFRBLT01003, WFRBLN09030, WFRBLN40057, WFRBLB50084]}
+      - {name: Private businesses and other, residual: true}
+
+  - id: wealth_dist
+    group: household
+    order: 71
+    title: Who holds the wealth
+    sub: Household net worth by wealth percentile
+    source:
+      type: fred_comp
+      freq: Q
+      scale: 0.001
+    vfmt: usd_bn
+    modes: [share, usd]
+    src_label: Federal Reserve DFA via FRED
+    sid_override: Distributional Financial Accounts
+    url: https://fred.stlouisfed.org/release/tables?rid=453&eid=813668
+    freq_label: Quarterly, since 1989
+    note: Groups are ranked by net worth, not income. The bottom half of households holds a few percent of the total; its share fell below three percent after 2008 and has recovered somewhat since 2020.
+    cats:
+      - {name: Top 1%, series: [WFRBLT01026]}
+      - {name: 90th to 99th percentile, series: [WFRBLN09053]}
+      - {name: 50th to 90th percentile, series: [WFRBLN40080]}
+      - {name: Bottom 50%, series: [WFRBLB50107]}
 
 # Releases always shown in the weekly strip when FRED lists them, beyond those tied to the series above.
 extra_releases:
