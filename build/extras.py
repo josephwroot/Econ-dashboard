@@ -364,12 +364,11 @@ def parse_percentile_table_transposed(grid):
             row = grid[r]
             # a blank cell under a merged header inherits the nearest label to the left in that row
             t = _cell_text(row[ci]) if ci < len(row) else ''
-            if not t:
+            if not t and r == hdr_rows[0]:
                 for cj in range(ci - 1, -1, -1):
                     tj = _cell_text(row[cj]) if cj < len(row) else ''
                     if tj:
-                        if re.search(r'number of returns|amount|percent|floor|income|tax|wages|credit', tj, re.I):
-                            t = tj
+                        t = tj
                         break
             if t and not re.fullmatch(r'\(?\d+\)?', t):
                 parts.append(t.lower())
@@ -387,7 +386,7 @@ def parse_percentile_table_transposed(grid):
         'avg_rate': find_col(r'average tax rate'),
     }
     # total income tax: the "amount" sub-column if there is one, else the column itself
-    tcols = [ci for ci, lab in enumerate(labels) if re.search(r'total income tax', lab) and not re.search(r'average|credit', lab)]
+    tcols = [ci for ci, lab in enumerate(labels) if re.search(r'^total income tax', lab) and not re.search(r'average', lab)]
     tax_col = None
     for ci in tcols:
         if 'amount' in labels[ci]:
@@ -573,6 +572,10 @@ def build_income_tax_shares(session, today):
             result['history_error'] = f'{name2}: {e}; grid head: {dump}'
     else:
         result['history_error'] = 'IRS table 4.1 not found; tried ' + ', '.join(tried)
+
+    if panel_points and len(panel_points) >= 8:
+        result.update({'year': panel_year, 'points': panel_points, 'source_url': base + name2, 'detail': 'table 4.1'})
+        return result
 
     # expanded one-year table (4.3), newest available
     cands = []
