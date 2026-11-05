@@ -74,6 +74,9 @@ jobs:
     needs: update
     if: needs.update.outputs.pages == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

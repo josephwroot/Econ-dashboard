@@ -397,7 +397,7 @@ def parse_percentile_table_transposed(grid):
         tax_col = tcols[-1]
     col['tax'] = tax_col
     if col['tax'] is None or col['agi'] is None:
-        raise RuntimeError(f'transposed layout: tax/agi columns not found; column labels: {labels[:40]}')
+        raise RuntimeError(f'transposed layout: tax/agi columns not found; all {len(labels)} column labels: {labels}')
     points = {}
     for key_pct, ri in prow.items():
         row = grid[ri]
@@ -531,55 +531,79 @@ def build_income_tax_shares(session, today):
                 tried.append(f'{type(e).__name__} {name}')
         return None, None
 
-    # expanded one-year table (4.3), newest available
-    cands = []
-    for y in range(today.year - 1, today.year - 6, -1):
-        yy = f'{y % 100:02d}'
-        cands += [f'{yy}in43ts.xls', f'{yy}in43ts.xlsx']
-    name, content = fetch_first(cands)
-    if not content:
-        raise RuntimeError('IRS table 4.3 not found; tried ' + ', '.join(tried))
-    year = 2000 + int(name[:2])
-    grid = _grid_from_bytes(content, name)
-    try:
-        points, allp, rows, hrow = parse_percentile_table(grid)
-    except Exception as e:  # noqa: BLE001
-        dump = [[_cell_text(c) or (c if isinstance(c, (int, float)) else '') for c in r[:10]] for r in grid[:40]]
-        raise RuntimeError(f'{name}: {e}; grid head: {dump}')
-    pts = []
-    for (kind, pct), pt in sorted(points.items(), key=lambda kv: (kv[0][0] != 'top', kv[0][1])):
-        if kind == 'all':
-            continue
-        pts.append({'label': _label(kind, pct), 'kind': kind, 'pct': pct,
-                    'returns': pt.get('returns'), 'agi_floor': pt.get('agi_floor'),
-                    'agi_share': pt.get('agi_share'), 'tax_share': pt.get('tax_share'), 'avg_rate': pt.get('avg_rate')})
-    result = {'year': year, 'points': pts, 'all': allp, 'source_url': base + name, 'parsed_rows': list(rows)}
-
-    # multi-year panel (4.1) for the history
+    result = {}
+    # multi-year panel (table 4.1): the history, and a coarse set of points as a fallback
     cands = []
     for y in range(today.year - 1, today.year - 6, -1):
         yy = f'{y % 100:02d}'
         cands += [f'{yy}in41ts.xlsx', f'{yy}in41ts.xls']
     name2, content2 = fetch_first(cands)
+    panel_points, panel_year = None, None
     if content2:
         try:
             grid2 = _grid_from_bytes(content2, name2)
             panel, cols = parse_panel_table(grid2)
             years = sorted({yr for sec in panel.values() for g in sec.values() for yr in g})
             hist = {'years': years, 'groups': []}
-            for (kind, pct) in sorted(cols.values(), key=lambda kp: (kp[0] != 'top', kp[1])):
+            for (kind, pct) in sorted(set(cols.values()), key=lambda kp: (kp[0] != 'top', kp[1])):
                 if kind == 'all':
                     continue
                 g = {'label': _label(kind, pct), 'kind': kind, 'pct': pct}
-                for key in ('tax_share', 'agi_share', 'avg_rate', 'agi_floor'):
+                for key in ('tax_share', 'agi_share', 'avg_rate', 'agi_floor', 'returns'):
                     sec = panel.get(key, {}).get((kind, pct), {})
                     g[key] = [sec.get(yr) for yr in years]
                 hist['groups'].append(g)
             result['history'] = hist
             result['history_url'] = base + name2
+            # latest year with tax shares, as fallback points
+            for yr in reversed(years):
+                pts = []
+                for g in hist['groups']:
+                    i = years.index(yr)
+                    if g['tax_share'][i] is None:
+                        continue
+                    pts.append({'label': g['label'], 'kind': g['kind'], 'pct': g['pct'], 'returns': g['returns'][i],
+                                'agi_floor': g['agi_floor'][i], 'agi_share': g['agi_share'][i],
+                                'tax_share': g['tax_share'][i], 'avg_rate': g['avg_rate'][i]})
+                if len(pts) >= 3:
+                    panel_points, panel_year = pts, yr
+                    break
         except Exception as e:  # noqa: BLE001
             dump = [[_cell_text(c) or (c if isinstance(c, (int, float)) else '') for c in r[:9]] for r in grid2[:45]]
             result['history_error'] = f'{name2}: {e}; grid head: {dump}'
     else:
         result['history_error'] = 'IRS table 4.1 not found; tried ' + ', '.join(tried)
+
+    # expanded one-year table (4.3), newest available
+    cands = []
+    for y in range(today.year - 1, today.year - 6, -1):
+        yy = f'{y % 100:02d}'
+        cands += [f'{yy}in43ts.xls', f'{yy}in43ts.xlsx']
+    name, content = fetch_first(cands)
+    detail_error = None
+    if content:
+        year = 2000 + int(name[:2])
+        grid = _grid_from_bytes(content, name)
+        try:
+            points, allp, rows, hrow = parse_percentile_table(grid)
+            pts = []
+            for (kind, pct), pt in sorted(points.items(), key=lambda kv: (kv[0][0] != 'top', kv[0][1])):
+                if kind == 'all':
+                    continue
+                pts.append({'label': _label(kind, pct), 'kind': kind, 'pct': pct,
+                            'returns': pt.get('returns'), 'agi_floor': pt.get('agi_floor'),
+                            'agi_share': pt.get('agi_share'), 'tax_share': pt.get('tax_share'), 'avg_rate': pt.get('avg_rate')})
+            result.update({'year': year, 'points': pts, 'all': allp, 'source_url': base + name, 'parsed_rows': list(rows), 'detail': 'table 4.3'})
+        except Exception as e:  # noqa: BLE001
+            detail_error = f'{name}: {e}'
+    else:
+        detail_error = 'IRS table 4.3 not found; tried ' + ', '.join(tried)
+    if 'points' not in result:
+        if panel_points:
+            result.update({'year': panel_year, 'points': panel_points, 'source_url': base + name2, 'detail': 'table 4.1',
+                           'detail_error': detail_error})
+        else:
+            raise RuntimeError(f'detail: {detail_error}; history: {result.get("history_error")}')
+    elif detail_error:
+        result['detail_error'] = detail_error
     return result
