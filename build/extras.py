@@ -353,8 +353,9 @@ def parse_percentile_table_transposed(grid):
     if len(prow) < 4:
         raise RuntimeError('transposed layout: fewer than 4 percentile rows')
     first = min(prow.values())
-    # header rows are the text rows above the first percentile row; build a label per column
-    hdr_rows = [r for r in range(max(0, first - 12), first) if any(_cell_text(c) for c in grid[r])]
+    # header rows are the rows above the first percentile row with at least two text cells
+    # (that leaves out the title and the units line, which sit alone in column A)
+    hdr_rows = [r for r in range(max(0, first - 12), first) if sum(1 for c in grid[r] if _cell_text(c)) >= 2]
     ncol = max(len(grid[r]) for r in hdr_rows + list(prow.values()))
     labels = []
     for ci in range(ncol):
@@ -386,7 +387,7 @@ def parse_percentile_table_transposed(grid):
         'avg_rate': find_col(r'average tax rate'),
     }
     # total income tax: the "amount" sub-column if there is one, else the column itself
-    tcols = [ci for ci, lab in enumerate(labels) if re.search(r'total income tax', lab) and not re.search(r'average', lab)]
+    tcols = [ci for ci, lab in enumerate(labels) if re.search(r'total income tax', lab) and not re.search(r'average|credit', lab)]
     tax_col = None
     for ci in tcols:
         if 'amount' in labels[ci]:

@@ -43,14 +43,34 @@ def log(*a):
     print(*a, flush=True)
 
 
-def get(url, params=None, tries=3, timeout=90):
+_fred_calls = []
+
+
+def _throttle(url):
+    if 'api.stlouisfed.org' not in url:
+        return
+    now = time.time()
+    while _fred_calls and now - _fred_calls[0] > 60:
+        _fred_calls.pop(0)
+    if len(_fred_calls) >= 100:
+        wait = 61 - (now - _fred_calls[0])
+        if wait > 0:
+            time.sleep(wait)
+    _fred_calls.append(time.time())
+
+
+def get(url, params=None, tries=4, timeout=90):
     last = None
     for i in range(tries):
         try:
+            _throttle(url)
             r = S.get(url, params=params, timeout=timeout)
             if r.status_code == 200:
                 return r
             last = f'HTTP {r.status_code}: {r.text[:200]}'
+            if r.status_code == 429:
+                time.sleep(35)
+                continue
         except Exception as e:  # noqa: BLE001
             last = repr(e)
         time.sleep(2 * (i + 1))
@@ -363,8 +383,9 @@ def build_fred_comp(cfg):
 
 # ---------------------------------------------------------------- TIC foreign holders, through FRED
 TIC_PREFIX = 'Foreign Portfolio Holdings of U.S. Long-Term and Short-Term Treasury Securities'
-TIC_EXCLUDE = ('all countries', 'total other', 'other', 'countries', 'europe', 'asia', 'africa', 'america', 'caribbean',
-               'oil exporters', 'international', 'middle east', 'banking centers', 'region', 'union')
+TIC_EXCLUDE = ('total', 'official', 'other', 'countries', 'area', 'europe', 'asia', 'africa', 'america', 'caribbean',
+               'exporters', 'international', 'middle east', 'centers', 'region', 'union', 'bills', 'bonds', 'notes',
+               'world', 'oecd', 'of which')
 
 
 def build_tic_fred(cfg):
@@ -379,6 +400,7 @@ def build_tic_fred(cfg):
     if not total:
         raise RuntimeError('TIC: "All Countries" series not found among ' + ', '.join(x['title'] for x in cands[:20]))
     countries = [x for x in cands if not any(w in x['title'].lower().split(': ', 1)[1] for w in TIC_EXCLUDE)]
+    log('note  TIC series titles: ' + '; '.join(x['title'].split(': ', 1)[1] for x in cands))
     tot_obs = dict(fred_obs(total['id']))
     latest = max(tot_obs)
     rows = []
@@ -416,7 +438,7 @@ def build_tic_fred(cfg):
                  'cats': [[n, hist[n]] for n in hist], 'gdp': None, 'title': f'Since {period_label(dates[0], "M")}'},
         'last_updated': meta.get('last_updated'), 'release_id': meta.get('release_id'), 'release_name': meta.get('release_name'),
         'cats': [{'name': n, 'residual': n == 'All other'} for n in hist], 'series_ids': {nm: sid for nm, sid, _ in top},
-        'countries_available': len(rows),
+        'countries_available': len(rows), 'all_titles': [x['title'].split(': ', 1)[1] for x in cands],
     }
 
 
