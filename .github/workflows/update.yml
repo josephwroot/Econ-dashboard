@@ -88,10 +88,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for id in $(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=6" --jq '.[].id' 2>/dev/null); do
+          # Pages identifies a deployment by the commit sha it was built from
+          for entry in $(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=6" --jq '.[] | "\(.id):\(.sha)"' 2>/dev/null); do
+            id=${entry%%:*}; sha=${entry##*:}
             st=$(gh api "repos/${{ github.repository }}/deployments/$id/statuses" --jq '.[0].state // "none"' 2>/dev/null)
-            if [ "$st" != "success" ]; then
-              gh api -X POST "repos/${{ github.repository }}/pages/deployments/$id/cancel" >/dev/null 2>&1 && echo "cancelled Pages deployment $id ($st)" || true
+            if [ "$st" != "success" ] && [ "$sha" != "${{ github.sha }}" ]; then
+              out=$(gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" 2>&1) && echo "cancelled Pages deployment $sha ($st)" || echo "cancel $sha: $out"
             fi
           done
       - id: deployment
