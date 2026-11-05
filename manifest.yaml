@@ -482,6 +482,7 @@ comp:
     source:
       type: fred_comp
       freq: Q
+      scales: {FDHBATN: 0.001}
       titles:
         FDHBFRBN: "Federal Debt Held by Federal Reserve Banks"
         FDHBATN: "Federal Debt Held by Agencies and Trusts"
@@ -509,24 +510,24 @@ comp:
       type: fred_comp
       freq: Q
       scale: 0.001
-      total: [BOGZ1FL313161105Q]
+      total: [BOGZ1FL313161100Q]
       titles:
-        BOGZ1FL313161105Q: "Federal Government; Treasury Securities; Liability, Level"
-        BOGZ1LM713061103Q: "Monetary Authority; Treasury Securities; Asset, Level"
-        BOGZ1LM263061105Q: "Rest of the World; Treasury Securities; Asset, Level"
-        BOGZ1LM153061105Q: "Households and Nonprofit Organizations; Treasury Securities; Asset, Level"
+        BOGZ1FL313161100Q: "Federal Government; Treasury Securities Held by the Public; Liability, Level"
+        BOGZ1LM713061103Q: "Central Bank; Total Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM263061105Q: "Rest of the World; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM153061105Q: "Households and Nonprofit Organizations; Treasury Securities; Asset, Market Value Levels"
         BOGZ1FL633061105Q: "Money Market Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM653061105Q: "Mutual Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM563061103Q: "Exchange-Traded Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM763061100Q: "U.S.-Chartered Depository Institutions; Treasury Securities; Asset, Level"
-        BOGZ1LM753061103Q: "Foreign Banking Offices in U.S.; Treasury Securities; Asset, Level"
-        BOGZ1LM473061105Q: "Credit Unions; Treasury Securities; Asset, Level"
-        BOGZ1LM573061105Q: "Private Pension Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM223061143Q: "State and Local Government Employee Defined Benefit Retirement Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM343061105Q: "Federal Government Retirement Funds; Treasury Securities; Asset, Level"
-        BOGZ1LM513061105Q: "Property-Casualty Insurance Companies; Treasury Securities; Asset, Level"
-        BOGZ1LM543061105Q: "Life Insurance Companies; Treasury Securities; Asset, Level"
-        BOGZ1LM213061103Q: "State and Local Governments; Treasury Securities, Excluding SLGS; Asset, Level"
+        BOGZ1LM653061105Q: "Mutual Funds; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM563061103Q: "Exchange-Traded Funds; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM763061100Q: "U.S.-Chartered Depository Institutions; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM753061103Q: "Foreign Banking Offices in U.S.; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM473061105Q: "Credit Unions; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM573061105Q: "Private Pension Funds; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM223061143Q: "State and Local Government Employee Defined Benefit Retirement Funds; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM343061105Q: "Federal Government Retirement Funds; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM513061105Q: "Property-Casualty Insurance Companies; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM543061105Q: "Life Insurance Companies; Treasury Securities; Asset, Market Value Levels"
+        BOGZ1LM213061103Q: "State and Local Governments; Treasury Securities, Excluding SLGS; Asset, Market Value Levels"
     vfmt: usd_bn
     modes: [share, usd]
     src_label: Federal Reserve Z.1 via FRED
@@ -550,14 +551,14 @@ comp:
     order: 30
     title: Foreign holders by country
     sub: Major foreign holders of Treasury securities
-    source: {type: tic_mfh}
+    source: {type: tic_fred}
     vfmt: usd_bn
     modes: [usd, share]
-    src_label: Treasury International Capital system
-    sid_override: Major Foreign Holders table
-    url: https://ticdata.treasury.gov/Publish/mfh.txt
+    src_label: Treasury International Capital system via FRED
+    sid_override: FORTREASPOS series
+    url: https://fred.stlouisfed.org/series/FORTREASPOS69995
     freq_label: Monthly, with a six-week lag
-    note: Holdings are attributed to the country of the custodian, not the owner, so Belgium, Luxembourg, the Cayman Islands, and Ireland are large mainly as financial centers. Includes both official and private holders.
+    note: The ten largest holders at the latest month, with everything else combined. Holdings are attributed to the country of the custodian, not the beneficial owner, so Belgium, Luxembourg, the Cayman Islands, and Ireland are large mainly as financial centers. Includes both official and private holders, at market value.
 
   - id: wealth_assets
     group: household

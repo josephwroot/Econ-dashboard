@@ -77,7 +77,8 @@ def mspd_securities(rows, as_of):
     rate_key = _pick(keys, 'interest_rate_pct', ('interest_rate',), ('coupon',))
     if not amt_key or not mat_key:
         raise RuntimeError(f'MSPD table 3: could not find amount/maturity columns among {keys}')
-    out, skipped_total, skipped_other = [], 0, 0
+    out, skipped_total, skipped = [], 0, {}
+    samples = {}
     for r in rows:
         if any(isinstance(v, str) and 'total' in v.lower() for k, v in r.items() if 'date' not in k):
             skipped_total += 1
@@ -85,15 +86,18 @@ def mspd_securities(rows, as_of):
         md = _parse_date(r.get(mat_key))
         amt = _num(r.get(amt_key))
         typ = _classify(r)
-        if md is None or amt is None or amt <= 0 or typ is None:
-            skipped_other += 1
+        reason = 'no maturity date' if md is None else 'no amount' if amt is None else 'zero amount' if amt <= 0 else 'no type' if typ is None else None
+        if reason:
+            skipped[reason] = skipped.get(reason, 0) + 1
+            if reason not in samples:
+                samples[reason] = {k: r.get(k) for k in keys if 'desc' in k or 'date' in k or 'amt' in k}
             continue
         out.append((typ, md, amt / 1000.0, _num(r.get(rate_key)) if rate_key else None))
     if not out:
         sample = {k: rows[0].get(k) for k in keys[:14]}
-        raise RuntimeError(f'MSPD table 3: parsed 0 securities (skipped {skipped_total} totals, {skipped_other} other); first row {sample}')
+        raise RuntimeError(f'MSPD table 3: parsed 0 securities (skipped {skipped_total} totals, {skipped}); first row {sample}')
     return out, {'amount_col': amt_key, 'maturity_col': mat_key, 'rate_col': rate_key,
-                 'n': len(out), 'skipped_total': skipped_total, 'skipped_other': skipped_other}
+                 'n': len(out), 'skipped_total': skipped_total, 'skipped': skipped, 'skipped_samples': samples}
 
 
 BUCKETS = [('Under 1 year', 0, 1), ('1 to 3 years', 1, 3), ('3 to 5 years', 3, 5),
@@ -267,7 +271,7 @@ def build_foreign_holders(session):
 
 
 # ---------------------------------------------------------------- IRS SOI: income and tax by percentile
-PCT_RE = re.compile(r'(top|bottom)\s+([\d.]+)\s*(?:percent|%)', re.I)
+PCT_RE = re.compile(r'(?:(top|bottom)\s+)?([\d.]+)\s*(?:percent\b|%)', re.I)
 
 
 def _grid_from_bytes(content, name):
@@ -296,7 +300,7 @@ def _header_columns(grid):
             t = _cell_text(v)
             m = PCT_RE.search(t)
             if m:
-                cols[ci] = (m.group(1).lower(), float(m.group(2)))
+                cols[ci] = ((m.group(1) or 'top').lower(), float(m.group(2)))
             elif re.search(r'all\s+returns', t, re.I):
                 cols[ci] = ('all', 0.0)
         if len(cols) > len(best):
@@ -312,7 +316,7 @@ def _header_columns(grid):
                 t = _cell_text(v)
                 m = PCT_RE.search(t)
                 if m:
-                    best[ci] = (m.group(1).lower(), float(m.group(2)))
+                    best[ci] = ((m.group(1) or 'top').lower(), float(m.group(2)))
     return best, best_row
 
 
@@ -334,8 +338,99 @@ def _find_row(grid, start, patterns, stop=None):
     return None
 
 
+def parse_percentile_table_transposed(grid):
+    """Parse the IRS table 4.3 layout: percentile groups in rows ("0.001 percent", "1 percent", ...,
+    "All returns, total"), items in columns under a two-level header with merged cells."""
+    # percentile rows
+    prow = {}
+    for ri, row in enumerate(grid):
+        t = _cell_text(row[0]) if row else ''
+        m = re.match(r'^(?:(top|bottom)\s+)?([\d.]+)\s*percent', t, re.I)
+        if m:
+            prow[((m.group(1) or 'top').lower(), float(m.group(2)))] = ri
+        elif re.match(r'^all returns', t, re.I):
+            prow[('all', 0.0)] = ri
+    if len(prow) < 4:
+        raise RuntimeError('transposed layout: fewer than 4 percentile rows')
+    first = min(prow.values())
+    # header rows are the text rows above the first percentile row; build a label per column
+    hdr_rows = [r for r in range(max(0, first - 12), first) if any(_cell_text(c) for c in grid[r])]
+    ncol = max(len(grid[r]) for r in hdr_rows + list(prow.values()))
+    labels = []
+    for ci in range(ncol):
+        parts = []
+        for r in hdr_rows:
+            row = grid[r]
+            # a blank cell under a merged header inherits the nearest label to the left in that row
+            t = _cell_text(row[ci]) if ci < len(row) else ''
+            if not t:
+                for cj in range(ci - 1, -1, -1):
+                    tj = _cell_text(row[cj]) if cj < len(row) else ''
+                    if tj:
+                        if re.search(r'number of returns|amount|percent|floor|income|tax|wages|credit', tj, re.I):
+                            t = tj
+                        break
+            if t and not re.fullmatch(r'\(?\d+\)?', t):
+                parts.append(t.lower())
+        labels.append(' | '.join(parts))
+
+    def find_col(*pats):
+        for ci, lab in enumerate(labels):
+            if all(re.search(p, lab) for p in pats):
+                return ci
+        return None
+    col = {
+        'returns': find_col(r'^number of returns'),
+        'agi_floor': find_col(r'floor'),
+        'agi': find_col(r'adjusted gross income less deficit') if find_col(r'adjusted gross income less deficit') is not None else find_col(r'^adjusted gross income'),
+        'avg_rate': find_col(r'average tax rate'),
+    }
+    # total income tax: the "amount" sub-column if there is one, else the column itself
+    tcols = [ci for ci, lab in enumerate(labels) if re.search(r'total income tax', lab) and not re.search(r'average', lab)]
+    tax_col = None
+    for ci in tcols:
+        if 'amount' in labels[ci]:
+            tax_col = ci
+            break
+    if tax_col is None and tcols:
+        tax_col = tcols[-1]
+    col['tax'] = tax_col
+    if col['tax'] is None or col['agi'] is None:
+        raise RuntimeError(f'transposed layout: tax/agi columns not found; column labels: {labels[:40]}')
+    points = {}
+    for key_pct, ri in prow.items():
+        row = grid[ri]
+        pt = {'kind': key_pct[0], 'pct': key_pct[1]}
+        for k, ci in col.items():
+            pt[k] = _num(row[ci]) if ci is not None and ci < len(row) else None
+        points[key_pct] = pt
+    allp = points.get(('all', 0.0))
+    if not allp or not allp.get('tax'):
+        raise RuntimeError('transposed layout: "All returns" row has no total income tax')
+    for pt in points.values():
+        if pt.get('tax') is not None:
+            pt['tax_share'] = pt['tax'] / allp['tax'] * 100
+        if pt.get('agi') is not None and allp.get('agi'):
+            pt['agi_share'] = pt['agi'] / allp['agi'] * 100
+        if pt.get('avg_rate') is None and pt.get('tax') and pt.get('agi'):
+            pt['avg_rate'] = pt['tax'] / pt['agi'] * 100
+    return points, allp, col, first
+
+
 def parse_percentile_table(grid):
-    """Parse a one-year IRS table (4.3 style): items in rows, percentile groups in columns."""
+    """Parse a one-year IRS table: try the transposed 4.3 layout first, then items-in-rows."""
+    try:
+        return parse_percentile_table_transposed(grid)
+    except RuntimeError as e_t:
+        err_t = str(e_t)
+    try:
+        return parse_percentile_table_rows(grid)
+    except RuntimeError as e_r:
+        raise RuntimeError(f'transposed: {err_t}; rows: {e_r}')
+
+
+def parse_percentile_table_rows(grid):
+    """Items in rows, percentile groups in columns."""
     cols, hrow = _header_columns(grid)
     rows = {}
     specs = [
@@ -482,7 +577,8 @@ def build_income_tax_shares(session, today):
             result['history'] = hist
             result['history_url'] = base + name2
         except Exception as e:  # noqa: BLE001
-            result['history_error'] = f'{name2}: {e}'
+            dump = [[_cell_text(c) or (c if isinstance(c, (int, float)) else '') for c in r[:9]] for r in grid2[:45]]
+            result['history_error'] = f'{name2}: {e}; grid head: {dump}'
     else:
         result['history_error'] = 'IRS table 4.1 not found; tried ' + ', '.join(tried)
     return result

@@ -285,13 +285,15 @@ def build_fred_comp(cfg):
     freq = src.get('freq', 'Q')
     per = per_year(freq)
     scale = float(src.get('scale', 1))
+    scales = src.get('scales', {}) or {}
     titles = src.get('titles', {})
     series = {}
 
     def load(sid):
         key = sid.lstrip('-')
         if key not in series:
-            series[key] = {d: v * scale for d, v in fred_obs(key, titles.get(key))}
+            f = scale * float(scales.get(key, 1))
+            series[key] = {d: v * f for d, v in fred_obs(key, titles.get(key))}
 
     for c in cfg['cats']:
         for sid in c.get('series', []):
@@ -356,6 +358,65 @@ def build_fred_comp(cfg):
                  'title': f'Since {period_label(dates[0], freq)}'},
         'last_updated': meta.get('last_updated'),
         'release_id': meta.get('release_id'), 'release_name': meta.get('release_name'),
+    }
+
+
+# ---------------------------------------------------------------- TIC foreign holders, through FRED
+TIC_PREFIX = 'Foreign Portfolio Holdings of U.S. Long-Term and Short-Term Treasury Securities'
+TIC_EXCLUDE = ('all countries', 'total other', 'other', 'countries', 'europe', 'asia', 'africa', 'america', 'caribbean',
+               'oil exporters', 'international', 'middle east', 'banking centers', 'region', 'union')
+
+
+def build_tic_fred(cfg):
+    if not FRED_KEY:
+        raise RuntimeError('FRED_API_KEY needed to list the TIC country series')
+    j = get(f'{FRED}/series/search', {'search_text': TIC_PREFIX, 'api_key': FRED_KEY, 'file_type': 'json', 'limit': 1000}).json()
+    cands = [x for x in j.get('seriess', []) if (x.get('title') or '').startswith(TIC_PREFIX + ': ') and x['id'].startswith('FORTREASPOS')
+             and x.get('frequency_short') == 'M']
+    if not cands:
+        raise RuntimeError(f'FRED search for "{TIC_PREFIX}" returned {len(j.get("seriess", []))} series, none matching')
+    total = next((x for x in cands if 'all countries' in x['title'].lower()), None)
+    if not total:
+        raise RuntimeError('TIC: "All Countries" series not found among ' + ', '.join(x['title'] for x in cands[:20]))
+    countries = [x for x in cands if not any(w in x['title'].lower().split(': ', 1)[1] for w in TIC_EXCLUDE)]
+    tot_obs = dict(fred_obs(total['id']))
+    latest = max(tot_obs)
+    rows = []
+    for x in countries:
+        try:
+            obs = dict(fred_obs(x['id']))
+        except Exception as e:  # noqa: BLE001
+            log(f'note  TIC {x["id"]} ({x["title"]}): {e}')
+            continue
+        if latest in obs:
+            rows.append((x['title'].split(': ', 1)[1], x['id'], obs))
+    if len(rows) < 5:
+        raise RuntimeError(f'TIC: only {len(rows)} country series had an observation for {latest}')
+    rows.sort(key=lambda r: -r[2][latest])
+    top = rows[:10]
+    dates = sorted(d for d in tot_obs if all(d in r[2] for r in top))
+    per = 12
+
+    def cats_at(d):
+        cats = [[nm, obs[d] / 1000] for nm, _, obs in top]
+        t = tot_obs[d] / 1000
+        cats.append(['All other', t - sum(v for _, v in cats)])
+        return cats, t
+    cur_cats, cur_total = cats_at(latest)
+    prev_total = cats_at(dates[-1 - per])[1] if len(dates) > per else None
+    hist = {nm: [] for nm, _ in cur_cats}
+    for d in dates:
+        for nm, v in cats_at(d)[0]:
+            hist[nm].append(v)
+    meta = fred_meta(total['id'])
+    return {
+        'snapshot': {'period': period_label(latest, 'M'), 'total': cur_total, 'prev_total': prev_total,
+                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest},
+        'hist': {'x': [year_frac(d) for d in dates], 'labels': [period_label(d, 'M') for d in dates],
+                 'cats': [[n, hist[n]] for n in hist], 'gdp': None, 'title': f'Since {period_label(dates[0], "M")}'},
+        'last_updated': meta.get('last_updated'), 'release_id': meta.get('release_id'), 'release_name': meta.get('release_name'),
+        'cats': [{'name': n, 'residual': n == 'All other'} for n in hist], 'series_ids': {nm: sid for nm, sid, _ in top},
+        'countries_available': len(rows),
     }
 
 
@@ -749,6 +810,8 @@ def main():
             stype = cfg.get('source', {}).get('type')
             if stype == 'fred_comp':
                 entry.update(build_fred_comp(cfg))
+            elif stype == 'tic_fred':
+                entry.update(build_tic_fred(cfg))
             elif stype == 'tic_mfh':
                 entry.update(extras.build_foreign_holders(S))
                 entry['cats'] = [{'name': n, 'residual': n == 'All other'} for n, _ in entry['snapshot']['cats']]
@@ -831,8 +894,8 @@ def main():
             c['next'] = fmt_date(next_by_release[c['release_id']])
         elif c.get('source', {}).get('type') == 'fred_comp':
             c['next'] = c.get('next') or ''
-        elif c.get('source', {}).get('type') == 'tic_mfh':
-            c['next'] = 'Around the 15th of each month, for the month six weeks earlier'
+        elif c.get('source', {}).get('type') in ('tic_mfh', 'tic_fred'):
+            c['next'] = c.get('next') or 'Around the 15th of each month, for the month six weeks earlier'
         else:
             c['next'] = 'Around the 8th business day of each month'
 
