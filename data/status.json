@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-15T14:38:12+00:00",
+ "generated_at": "2026-11-15T22:11:32+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -17,8 +17,6 @@
   "debt_gdp",
   "gross_debt_gdp",
   "balance",
-  "gross_debt",
-  "avg_rate",
   "hh_networth",
   "nw_to_income",
   "med_income",
@@ -26,8 +24,6 @@
   "nim",
   "fb_share",
   "fb_lf",
-  "outlays",
-  "receipts",
   "gdi_types",
   "payrolls_sector",
   "lf_sex",
@@ -36,10 +32,15 @@
   "foreign_holders",
   "wealth_assets",
   "wealth_dist",
-  "maturity",
   "taxshares"
  ],
- "stale": {},
+ "stale": {
+  "gross_debt": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny failed: HTTP 503: <!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><style>@font-face {\n  font-family: 'Source Sans Pro';\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/sourc",
+  "avg_rate": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates failed: HTTP 503: <!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><style>@font-face {\n  font-family: 'Source Sans Pro';\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/sourc",
+  "outlays": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_9 failed: HTTP 503: <!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><style>@font-face {\n  font-family: 'Source Sans Pro';\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/sourc",
+  "receipts": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_9 failed: HTTP 503: <!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><style>@font-face {\n  font-family: 'Source Sans Pro';\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/sourc",
+  "maturity": "RuntimeError: GET https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/debt/mspd/mspd_table_3_market failed: HTTP 503: <!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><style>@font-face {\n  font-family: 'Source Sans Pro';\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/sourc"
+ },
  "failed": {},
  "notes": []
 }
