@@ -563,7 +563,7 @@ def fetch_source(src, freq):
     if t == 'fred_multi':
         lines = []
         for ln in src['lines']:
-            obs = apply_transform(fred_obs(ln['series']), ln, freq)
+            obs = apply_transform(fred_obs(ln['series'], ln.get('title')), ln, freq)
             lines.append({'label': ln['label'], 'series': ln['series'], 'obs': [[d, round(v, 6)] for d, v in sorted(obs)]})
         meta = fred_meta(src['lines'][0]['series'])
         meta['lines'] = lines
