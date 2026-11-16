@@ -754,7 +754,7 @@ GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
-GSS_METHOD = 'wtssps-first/13cats/labels'  # bump to force a re-read after a change in how the shares are computed
+GSS_METHOD = 'wtssps-first/13cats/labels2'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -812,34 +812,40 @@ def build_gss_religion(session, today, prev=None):
             vl = getattr(rdr, '_varlist', None) or getattr(rdr, 'varlist', None)
 
             def labels_for(var):
-                for key in (var, str(var).lower(), str(var).upper()):
-                    if key in vls:
-                        return vls[key]
+                # the label set attached to the variable first (several variables share label
+                # names in the GSS file), then one that merely carries the variable's name
+                out = []
                 if lbl and vl and var in list(vl):
-                    return vls.get(lbl[list(vl).index(var)]) or {}
-                return {}
-            lab = labels_for(opt['other']) if opt['other'] else {}
-            lds_codes = {int(k) for k, v in lab.items() if re.search(r'latter.?day|mormon|\blds\b', str(v), re.I)}
-            diag['lds_labels'] = {int(k): str(v) for k, v in lab.items() if int(k) in lds_codes}
-            dlab = labels_for(opt['denom']) if opt['denom'] else {}
-            for k, v in dlab.items():
-                t = str(v).lower()
-                fam = ('Baptist' if 'bapt' in t else 'Methodist' if 'meth' in t else 'Lutheran' if 'luth' in t
-                       else 'Presbyterian' if 'presb' in t else 'Episcopal' if 'episcopal' in t
-                       else 'Nondenominational' if 'no denom' in t or 'nondenom' in t or 'non-denom' in t
-                       else 'Other Protestant' if t.strip() == 'other' or t.startswith('other') else None)
-                if fam:
-                    denom_fam[int(k)] = fam
-            diag['denom_labels'] = {int(k): str(v) for k, v in list(dlab.items())[:40]}
+                    out.append(vls.get(lbl[list(vl).index(var)]) or {})
+                for key in (var, str(var).lower(), str(var).upper()):
+                    if key in vls and vls[key] not in out:
+                        out.append(vls[key])
+                return out
+            labs = labels_for(opt['other']) if opt['other'] else []
+            for lab in labs:
+                lds_codes |= {int(k) for k, v in lab.items() if re.search(r'latter.?day|mormon|\blds\b', str(v), re.I)}
+            diag['lds_labels'] = {int(k): str(v) for lab in labs for k, v in lab.items() if int(k) in lds_codes}
+
+            def fam_of(text):
+                t = str(text).lower()
+                return ('Baptist' if 'bapt' in t else 'Methodist' if 'meth' in t else 'Lutheran' if 'luth' in t
+                        else 'Presbyterian' if 'presb' in t else 'Episcopal' if 'episcopal' in t
+                        else 'Nondenominational' if 'no denom' in t or 'nondenom' in t or 'non-denom' in t
+                        else 'Other Protestant' if t.strip() == 'other' or t.startswith('other') else None)
+            denom_candidates = []
+            for lab in (labels_for(opt['denom']) if opt['denom'] else []):
+                m = {int(k): fam_of(v) for k, v in lab.items() if fam_of(v)}
+                if m:
+                    denom_candidates.append((f'labels ({len(m)} codes)', m))
         except Exception as e:  # noqa: BLE001
             lds_note = f'{type(e).__name__}: {e}'
-        if not denom_fam:  # fall back to the documented code ranges
-            denom_fam = {**{c: 'Baptist' for c in range(10, 20)}, **{c: 'Methodist' for c in range(20, 30)},
-                         **{c: 'Lutheran' for c in range(30, 40)}, **{c: 'Presbyterian' for c in range(40, 50)},
-                         50: 'Episcopal', 60: 'Other Protestant', 70: 'Nondenominational'}
-            diag['denom_source'] = 'code ranges'
-        else:
-            diag['denom_source'] = f'{len(denom_fam)} labelled codes'
+            denom_candidates = []
+        # documented codings as fallbacks: the seven-category DENOM, and the detailed DENOM16 ranges
+        denom_candidates.append(('seven codes', {1: 'Baptist', 2: 'Methodist', 3: 'Lutheran', 4: 'Presbyterian', 5: 'Episcopal',
+                                                 6: 'Other Protestant', 7: 'Nondenominational'}))
+        denom_candidates.append(('code ranges', {**{c: 'Baptist' for c in range(10, 20)}, **{c: 'Methodist' for c in range(20, 30)},
+                                                 **{c: 'Lutheran' for c in range(30, 40)}, **{c: 'Presbyterian' for c in range(40, 50)},
+                                                 50: 'Episcopal', 60: 'Other Protestant', 70: 'Nondenominational'}))
         # weights, coalesced row by row: the post-stratification weight WTSSPS, which NORC computes
         # the same way for every year including the web-era waves, then the nonresponse-adjusted
         # WTSSNRPS (2004 on), then the original WTSSALL
@@ -859,7 +865,20 @@ def build_gss_religion(session, today, prev=None):
     except OSError:
         pass
     df = df.apply(pd.to_numeric, errors='coerce')
+    # NORC stores missing-value codes as negatives in some releases and as very large integers in
+    # others; either way nothing meaningful is above 100000
+    for c in ('relig', 'attend', 'denom', 'other'):
+        df[c] = df[c].where((df[c] >= 0) & (df[c] < 100000))
     df = df[df['year'] > 1900]
+    # pick the denomination coding that covers the codes actually present among Protestants
+    prot_codes = df.loc[df['relig'] == 1, 'denom'].dropna()
+    denom_fam, diag['denom_source'] = {}, 'none'
+    for label, cand in denom_candidates:
+        cover = float(prot_codes.isin(list(cand)).mean()) if len(prot_codes) else 0.0
+        diag.setdefault('denom_coverage', {})[label] = round(cover, 3)
+        if cover >= 0.8:
+            denom_fam, diag['denom_source'] = cand, label
+            break
     w = pd.Series(float('nan'), index=df.index)
     for i in range(len(wcols)):
         c = df[f'w{i}']
@@ -896,7 +915,7 @@ def build_gss_religion(session, today, prev=None):
     diag['cats_latest'] = {k: int(v) for k, v in df.loc[df['year'] == lastyr, 'cat'].value_counts().items()}
 
     def shares(col, groups, valid_mask=None):
-        valid = df[valid_mask] if valid_mask is not None else df[df[col] >= 0]
+        valid = df[valid_mask] if valid_mask is not None else df[df[col].notna()]
         out = {name: [] for name, _ in groups}
         ns = []
         for y in years:
