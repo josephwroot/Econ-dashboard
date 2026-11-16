@@ -634,18 +634,13 @@ comp:
     freq: A
     source:
       type: gss
-    cats:   # colours chosen so that Protestant families are warm, other Christians blue, other faiths green, none grey
-      - {name: Baptist, color: "var(--c1)"}
-      - {name: Methodist, color: "var(--c2)"}
-      - {name: Lutheran, color: "var(--c3)"}
-      - {name: Presbyterian, color: "var(--c11)"}
-      - {name: Episcopal, color: "var(--c9)"}
-      - {name: Other Protestant, color: "var(--c7)"}
-      - {name: Nondenominational, color: "var(--c6)"}
+    cats:
+      - {name: Protestant and other Christian, color: "var(--c1)"}
       - {name: Catholic, color: "var(--c8)"}
-      - {name: Other Christian, color: "var(--c12)"}
       - {name: Jewish, color: "var(--c5)"}
       - {name: Muslim, color: "var(--c4)"}
+      - {name: Hindu, color: "var(--c3)"}
+      - {name: Buddhist, color: "var(--c6)"}
       - {name: Other religion, color: "var(--c10)"}
       - {name: No religion, color: "var(--crest)"}
     vfmt: pct
@@ -654,7 +649,7 @@ comp:
     src_label: General Social Survey (NORC)
     url: https://gss.norc.org/get-the-data/stata
     freq_label: Yearly from 1972, every two years since 1994; adults 18 and over, weighted with NORC's post-stratification weight (WTSSPS), which is built the same way for every year
-    note: Answers to "What is your religious preference?" and, for Protestants, "What specific denomination is that?" Other Protestant gathers the denominations outside the five big families, among them Pentecostals, Churches of Christ, Adventists and Jehovah's Witnesses; nondenominational is Protestants naming no denomination plus those who answer simply "Christian". Other Christian is Latter-day Saints (identified from the write-in denomination) and, since 1998, Orthodox Christians. Other religion is Buddhists, Hindus, other eastern religions, Native American religions and write-ins; Muslims have been coded separately only since 1998 and before then sit in other religion. The detail view breaks the smaller faiths out one by one. The GSS switched from in-person interviews to mostly web questionnaires in 2021, and NORC cautions that part of that year's jump in "no religion" reflects the change in mode; later waves mix the two. The 1972 to 1974 surveys sampled households rather than adults, which the weights correct only in part.
+    note: Answers to "What is your religious preference?" Protestant and other Christian is everyone Christian but Catholic, including nondenominational Christians, Latter-day Saints and Orthodox Christians; the detail view splits them by denominational family. Muslims, Hindus and Buddhists have been coded separately only since 1998, so before then they sit inside other religion, which otherwise holds other eastern religions, Native American religions and write-ins. The GSS switched from in-person interviews to mostly web questionnaires in 2021, and NORC cautions that part of that year's jump in "no religion" reflects the change in mode; later waves mix the two. The 1972 to 1974 surveys sampled households rather than adults, which the weights correct only in part.
 
 extra_releases:
   - Job Openings and Labor Turnover Survey

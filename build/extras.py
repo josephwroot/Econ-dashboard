@@ -741,8 +741,11 @@ GSS_URL = 'https://gss.norc.org/content/dam/gss/get-the-data/documents/stata/GSS
 # DENOM codes (Protestants only): 10-19 Baptist, 20-29 Methodist, 30-39 Lutheran, 40-49 Presbyterian,
 # 50 Episcopal, 60 other, 70 no denomination. Latter-day Saints are found through the OTHER variable's labels.
 GSS_CATS = [  # stacking order, bottom to top
+    'Protestant and other Christian', 'Catholic', 'Jewish', 'Muslim', 'Hindu', 'Buddhist', 'Other religion', 'No religion',
+]
+GSS_FAMILIES = [  # the non-Catholic Christians by denominational family, for the detail view
     'Baptist', 'Methodist', 'Lutheran', 'Presbyterian', 'Episcopal', 'Other Protestant', 'Nondenominational',
-    'Catholic', 'Other Christian', 'Jewish', 'Muslim', 'Other religion', 'No religion',
+    'Latter-day Saints and Orthodox',
 ]
 GSS_SMALL = [  # the religions the GSS has coded separately since 1998, as shares of all adults
     ('Muslim', {9}), ('Buddhist', {6}), ('Hindu', {7}), ('Orthodox Christian', {10}),
@@ -754,7 +757,7 @@ GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
-GSS_METHOD = 'wtssps-first/13cats/labels3'  # bump to force a re-read after a change in how the shares are computed
+GSS_METHOD = 'wtssps-first/8cats/labels3'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -897,17 +900,18 @@ def build_gss_religion(session, today, prev=None):
     fam = dn.map(denom_fam)
     conds = [
         lds & r.isin([1, 5, 11, 13]),   # Latter-day Saints answer Protestant, other, or Christian; the write-in settles it
-        r == 4, r == 2, r == 3, r == 9, r.isin([5, 6, 7, 8, 12]), r == 10,
+        r == 4, r == 2, r == 3, r == 9, r == 7, r == 6, r.isin([5, 8, 12]), r == 10,
         r.isin([11, 13]),
         (r == 1) & fam.notna(), r == 1,
     ]
     choices = [
-        'Other Christian',
-        'No religion', 'Catholic', 'Jewish', 'Muslim', 'Other religion', 'Other Christian',
+        'Latter-day Saints and Orthodox',
+        'No religion', 'Catholic', 'Jewish', 'Muslim', 'Hindu', 'Buddhist', 'Other religion', 'Latter-day Saints and Orthodox',
         'Nondenominational',
         fam.fillna(''), 'Other Protestant',
     ]
-    df['cat'] = np.select(conds, choices, default='')
+    df['fam'] = np.select(conds, choices, default='')
+    df['cat'] = df['fam'].where(~df['fam'].isin(GSS_FAMILIES), 'Protestant and other Christian')
     # diagnostics for the log: how the latest wave's Protestants are spread over denomination codes
     lastyr = df['year'].max()
     pr = df[(df['year'] == lastyr) & (df['relig'] == 1)]
@@ -927,6 +931,7 @@ def build_gss_religion(session, today, prev=None):
         return out, ns
     GSS_RELIG = [(name, {name}) for name in GSS_CATS]
     rel, n_rel = shares('cat', GSS_RELIG, df['cat'] != '')
+    fams, _ = shares('fam', [(name, {name}) for name in GSS_FAMILIES], df['cat'] != '')
     att, n_att = shares('attend', GSS_ATTEND)
     small, n_small = shares('relig', GSS_SMALL)
     small_idx = [i for i, y in enumerate(years) if y >= GSS_SMALL_FROM]
@@ -944,7 +949,12 @@ def build_gss_religion(session, today, prev=None):
                 'headline': {'name': 'No religion', 'value': none_now, 'prev': none_then, 'delta': 'pt'}}
     hist = {'x': [float(y) for y in years], 'labels': [str(y) for y in years],
             'cats': [[name, rel[name]] for name, _ in GSS_RELIG], 'gdp': None, 'title': f'Since {years[0]}'}
-    extras = [{'title': f'Religions coded separately since {GSS_SMALL_FROM}', 'cats': [{'name': name} for name, _ in GSS_SMALL],
+    extras = [{'title': 'Protestants and other Christians by denominational family', 'cats': [{'name': name} for name in GSS_FAMILIES],
+               'hist': {'x': [float(y) for y in years], 'labels': [str(y) for y in years],
+                        'cats': [[name, fams[name]] for name in GSS_FAMILIES], 'gdp': None},
+               'modes': ['level'], 'vfmt': 'pct', 'mode_labels': {'level': 'Share of all adults'},
+               'note': 'The five families the survey asks about by name, the remaining denominations together (Pentecostals, Churches of Christ, Adventists, Jehovah\u2019s Witnesses and others), Protestants naming no denomination or answering simply "Christian", and Latter-day Saints (from the write-in) with, since 1998, Orthodox Christians.'},
+              {'title': f'Religions coded separately since {GSS_SMALL_FROM}', 'cats': [{'name': name} for name, _ in GSS_SMALL],
                'hist': {'x': [float(years[i]) for i in small_idx], 'labels': [str(years[i]) for i in small_idx],
                         'cats': [[name, [small[name][i] for i in small_idx]] for name, _ in GSS_SMALL], 'gdp': None},
                'modes': ['level'], 'vfmt': 'pct', 'mode_labels': {'level': 'Share of all adults'},
