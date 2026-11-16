@@ -1022,6 +1022,11 @@ def main():
             err = f'{type(e).__name__}: {e}'
             log(f'FAIL  {cid:14s} {err}')
             traceback.print_exc()
+            entry = {k: v for k, v in cfg.items()}   # drop anything a partial build left behind
+            entry['kind'] = 'comp'
+            entry['sid'] = cfg.get('sid_override', '')
+            if cid in status['ok']:
+                status['ok'].remove(cid)
             old = prev_comp.get(cid)
             if old and old.get('snapshot'):
                 entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name', 'cats', 'extras', 'fetched_on', 'release', 'updated_text', 'next', 'source_url', 'n_latest') if k in old})

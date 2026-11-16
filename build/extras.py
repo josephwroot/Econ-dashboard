@@ -752,7 +752,10 @@ def build_gss_religion(session, today, prev=None):
     import tempfile
     import zipfile
     prev = prev or {}
-    if prev.get('snapshot') and prev.get('hist') and prev.get('fetched_on'):
+    cached_ok = (prev.get('snapshot') and prev.get('hist') and prev.get('fetched_on') and not prev.get('stale')
+                 and all(v is not None for _, v in prev['snapshot']['cats'])
+                 and all(v is not None for _, vals in prev['hist']['cats'] for v in vals))
+    if cached_ok:
         try:
             age = (today - dt.date.fromisoformat(prev['fetched_on'])).days
         except ValueError:
