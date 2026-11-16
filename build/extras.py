@@ -616,86 +616,115 @@ def build_income_tax_shares(session, today):
 
 
 # ---------------------------------------------------------------- BLS OEWS: the most common occupations
-def _col(headers, *names):
-    hl = [str(h or '').strip().upper() for h in headers]
-    for n in names:
-        if n in hl:
-            return hl.index(n)
-    return None
+# The BLS web site refuses downloads from cloud hosts, so the occupation figures come from the
+# BLS public API instead, which carries the Occupational Employment and Wage Statistics as time
+# series (one value a year). The API cannot list occupations, so the detailed occupations that
+# have been among the largest in recent years are named here; the forty largest among them are
+# shown. Codes are the 2018 Standard Occupational Classification as used by the OEWS.
+OEWS_GROUPS = {
+    '11-0000': 'Management', '13-0000': 'Business and Financial Operations', '15-0000': 'Computer and Mathematical',
+    '17-0000': 'Architecture and Engineering', '19-0000': 'Life, Physical, and Social Science',
+    '21-0000': 'Community and Social Service', '23-0000': 'Legal', '25-0000': 'Educational Instruction and Library',
+    '27-0000': 'Arts, Design, Entertainment, Sports, and Media', '29-0000': 'Healthcare Practitioners and Technical',
+    '31-0000': 'Healthcare Support', '33-0000': 'Protective Service', '35-0000': 'Food Preparation and Serving Related',
+    '37-0000': 'Building and Grounds Cleaning and Maintenance', '39-0000': 'Personal Care and Service',
+    '41-0000': 'Sales and Related', '43-0000': 'Office and Administrative Support', '45-0000': 'Farming, Fishing, and Forestry',
+    '47-0000': 'Construction and Extraction', '49-0000': 'Installation, Maintenance, and Repair', '51-0000': 'Production',
+    '53-0000': 'Transportation and Material Moving',
+}
+OEWS_CANDIDATES = {
+    '11-1021': 'General and Operations Managers', '11-2022': 'Sales Managers', '11-3021': 'Computer and Information Systems Managers',
+    '11-3031': 'Financial Managers', '11-9111': 'Medical and Health Services Managers', '11-9199': 'Managers, All Other',
+    '13-1071': 'Human Resources Specialists', '13-1111': 'Management Analysts',
+    '13-1161': 'Market Research Analysts and Marketing Specialists', '13-1198': 'Project Management Specialists',
+    '13-1199': 'Business Operations Specialists, All Other', '13-2011': 'Accountants and Auditors',
+    '15-1232': 'Computer User Support Specialists', '15-1252': 'Software Developers',
+    '23-1011': 'Lawyers',
+    '25-2021': 'Elementary School Teachers, Except Special Education',
+    '25-2022': 'Middle School Teachers, Except Special and Career/Technical Education',
+    '25-2031': 'Secondary School Teachers, Except Special and Career/Technical Education',
+    '25-3031': 'Substitute Teachers, Short-Term', '25-9045': 'Teaching Assistants, Except Postsecondary',
+    '29-1141': 'Registered Nurses', '29-2061': 'Licensed Practical and Licensed Vocational Nurses',
+    '31-1120': 'Home Health and Personal Care Aides', '31-1131': 'Nursing Assistants', '31-9092': 'Medical Assistants',
+    '33-3051': "Police and Sheriff's Patrol Officers", '33-9032': 'Security Guards',
+    '35-1012': 'First-Line Supervisors of Food Preparation and Serving Workers', '35-2011': 'Cooks, Fast Food',
+    '35-2014': 'Cooks, Restaurant', '35-2021': 'Food Preparation Workers', '35-3011': 'Bartenders',
+    '35-3023': 'Fast Food and Counter Workers', '35-3031': 'Waiters and Waitresses', '35-9021': 'Dishwashers',
+    '37-2011': 'Janitors and Cleaners, Except Maids and Housekeeping Cleaners', '37-2012': 'Maids and Housekeeping Cleaners',
+    '37-3011': 'Landscaping and Groundskeeping Workers', '39-9011': 'Childcare Workers',
+    '41-1011': 'First-Line Supervisors of Retail Sales Workers', '41-2011': 'Cashiers', '41-2031': 'Retail Salespersons',
+    '41-3091': 'Sales Representatives of Services, Except Advertising, Insurance, Financial Services, and Travel',
+    '41-4012': 'Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products',
+    '43-1011': 'First-Line Supervisors of Office and Administrative Support Workers',
+    '43-3031': 'Bookkeeping, Accounting, and Auditing Clerks', '43-4051': 'Customer Service Representatives',
+    '43-4171': 'Receptionists and Information Clerks', '43-5071': 'Shipping, Receiving, and Inventory Clerks',
+    '43-6013': 'Medical Secretaries and Administrative Assistants',
+    '43-6014': 'Secretaries and Administrative Assistants, Except Legal, Medical, and Executive', '43-9061': 'Office Clerks, General',
+    '47-1011': 'First-Line Supervisors of Construction Trades and Extraction Workers', '47-2031': 'Carpenters',
+    '47-2061': 'Construction Laborers', '47-2111': 'Electricians',
+    '49-3023': 'Automotive Service Technicians and Mechanics', '49-9071': 'Maintenance and Repair Workers, General',
+    '51-1011': 'First-Line Supervisors of Production and Operating Workers', '51-2098': 'Miscellaneous Assemblers and Fabricators',
+    '51-9061': 'Inspectors, Testers, Sorters, Samplers, and Weighers',
+    '53-1047': 'First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors',
+    '53-3032': 'Heavy and Tractor-Trailer Truck Drivers', '53-3033': 'Light Truck Drivers',
+    '53-7051': 'Industrial Truck and Tractor Operators', '53-7062': 'Laborers and Freight, Stock, and Material Movers, Hand',
+    '53-7064': 'Packers and Packagers, Hand', '53-7065': 'Stockers and Order Fillers',
+}
+OEWS_TOTAL = '00-0000'
+WAGE_CAP = 239200  # the OEWS does not publish annual wages above this; the API returns the cap
 
 
-def build_occupations(session, today):
-    """Top detailed occupations and the SOC major groups from the OEWS national file."""
-    import zipfile
-    base = 'https://www.bls.gov/oes/special-requests/'
-    tried = []
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; econ-dashboard/1.0; +https://github.com/josephwroot/econ-dashboard)',
-               'Accept': 'application/zip,application/octet-stream,*/*'}
-    content, year = None, None
-    for y in range(today.year - 1, today.year - 5, -1):
-        name = f'oesm{y % 100:02d}nat.zip'
-        try:
-            r = session.get(base + name, timeout=180, headers=headers)
-            tried.append(f'{r.status_code} {name} ({len(r.content)} bytes)')
-            if r.status_code == 200 and len(r.content) > 100000 and r.content[:2] == b'PK':
-                content, year = r.content, y
-                break
-        except Exception as e:  # noqa: BLE001
-            tried.append(f'{type(e).__name__} {name}')
-    if not content:
-        raise RuntimeError('OEWS national zip not found; tried ' + ', '.join(tried))
-    zf = zipfile.ZipFile(io.BytesIO(content))
-    xl = [n for n in zf.namelist() if n.lower().endswith(('.xlsx', '.xls')) and 'national' in n.lower() and 'field' not in n.lower()]
-    if not xl:
-        raise RuntimeError(f'OEWS zip has no national workbook; members: {zf.namelist()[:20]}')
-    grid = _grid_from_bytes(zf.read(xl[0]), xl[0])
-    hdr_i = None
-    for i, row in enumerate(grid[:10]):
-        if _col(row, 'OCC_CODE') is not None and _col(row, 'TOT_EMP') is not None:
-            hdr_i = i
-            break
-    if hdr_i is None:
-        raise RuntimeError(f'OEWS workbook {xl[0]}: header row not found; first rows {[r[:12] for r in grid[:5]]}')
-    h = grid[hdr_i]
-    c_code, c_title, c_group = _col(h, 'OCC_CODE'), _col(h, 'OCC_TITLE'), _col(h, 'O_GROUP', 'OCC_GROUP')
-    c_emp, c_med, c_mean = _col(h, 'TOT_EMP'), _col(h, 'A_MEDIAN'), _col(h, 'A_MEAN')
-    c_naics, c_own = _col(h, 'NAICS'), _col(h, 'OWN_CODE')
-    if c_group is None or c_med is None:
-        raise RuntimeError(f'OEWS workbook: columns {h}')
-    rows = []
-    for row in grid[hdr_i + 1:]:
-        if row is None or len(row) <= max(c_code, c_emp, c_group):
-            continue
-        if c_naics is not None and str(row[c_naics] or '').strip() not in ('000000', '0', '', 'None'):
-            continue
-        if c_own is not None and str(row[c_own] or '').strip() not in ('1235', '0', '', 'None'):
-            continue
-        emp = _num(row[c_emp])
+def oews_sid(code, dtype):
+    """OEWS series id: OE, U (not seasonally adjusted), N (national), area 0000000, industry 000000
+    (all industries), the six-digit occupation code, and the data type (01 employment,
+    04 annual mean wage, 13 annual median wage)."""
+    return 'OEUN' + '0' * 13 + code.replace('-', '') + dtype
+
+
+def build_occupations(bls_fn, today, prev=None):
+    """Top detailed occupations and the SOC major groups from the OEWS, via the BLS API.
+    Annual data: once the year's figures are in hand nothing is fetched until the next
+    survey year is due (May estimates come out the following spring)."""
+    exp_year = today.year - 1 if today.month >= 4 else today.year - 2
+    if prev and prev.get('top') and prev.get('year') and prev.get('source') == 'api' and prev['year'] >= exp_year:
+        out = dict(prev)
+        out['fetched'] = False
+        return out
+    codes = [OEWS_TOTAL] + list(OEWS_GROUPS) + list(OEWS_CANDIDATES)
+    sids = [oews_sid(c, '01') for c in codes] + [oews_sid(c, '13') for c in codes] + [oews_sid(OEWS_TOTAL, '04')]
+    data = {}
+    for k in range(0, len(sids), 25):
+        data.update(bls_fn(sids[k:k + 25], exp_year - 1, exp_year, annual=True))
+
+    def val(code, dtype, year):
+        for y, v in data.get(oews_sid(code, dtype)) or []:
+            if y == year:
+                return v
+        return None
+    year = exp_year if val(OEWS_TOTAL, '01', exp_year) else exp_year - 1
+    T = val(OEWS_TOTAL, '01', year)
+    if not T:
+        raise RuntimeError(f'OEWS: no national total for {exp_year} or {exp_year - 1}; {len(data)} series returned')
+
+    def pack(code, title):
+        emp = val(code, '01', year)
         if emp is None:
-            continue
-        rows.append({'code': str(row[c_code]).strip(), 'title': _cell_text(row[c_title]), 'group': str(row[c_group] or '').strip().lower(),
-                     'emp': emp, 'median': _num(row[c_med]), 'mean': _num(row[c_mean]) if c_mean is not None else None,
-                     'median_capped': str(row[c_med]).strip() == '#'})
-    total = next((r for r in rows if r['group'] == 'total' or r['code'] == '00-0000'), None)
-    if not total:
-        raise RuntimeError(f'OEWS: total row not found among {len(rows)} rows; groups seen {sorted({r["group"] for r in rows})}')
-    detailed = [r for r in rows if r['group'] == 'detailed']
-    majors = [r for r in rows if r['group'] == 'major']
-    if len(detailed) < 100 or len(majors) < 15:
-        raise RuntimeError(f'OEWS: {len(detailed)} detailed and {len(majors)} major rows; groups seen {sorted({r["group"] for r in rows})}')
+            return None
+        med = val(code, '13', year)
+        return {'code': code, 'title': title, 'emp': emp, 'share': emp / T * 100,
+                'median': med, 'median_capped': bool(med is not None and med >= WAGE_CAP)}
+    detailed = [r for r in (pack(c, t) for c, t in OEWS_CANDIDATES.items()) if r]
+    groups = [r for r in (pack(c, t) for c, t in OEWS_GROUPS.items()) if r]
+    if len(detailed) < 40 or len(groups) < 20:
+        raise RuntimeError(f'OEWS {year}: only {len(detailed)} detailed and {len(groups)} group series returned')
     detailed.sort(key=lambda r: -r['emp'])
-    majors.sort(key=lambda r: -r['emp'])
-    T = total['emp']
-
-    def pack(r):
-        return {'code': r['code'], 'title': r['title'], 'emp': r['emp'], 'share': r['emp'] / T * 100,
-                'median': r['median'], 'median_capped': r['median_capped']}
-    top = [pack(r) for r in detailed[:40]]
+    groups.sort(key=lambda r: -r['emp'])
+    top = detailed[:40]
     cum = 0.0
     for r in top:
         cum += r['share']
         r['cum_share'] = cum
-    return {'year': year, 'source_url': base + f'oesm{year % 100:02d}nat.zip', 'workbook': xl[0],
-            'total_emp': T, 'median_all': total['median'], 'mean_all': total['mean'],
-            'n_detailed': len(detailed), 'top': top, 'groups': [pack(r) for r in majors],
-            'last_updated': f'{year}-05-01'}
+    return {'year': year, 'source': 'api', 'source_url': 'https://www.bls.gov/oes/tables.htm',
+            'total_emp': T, 'median_all': val(OEWS_TOTAL, '13', year), 'mean_all': val(OEWS_TOTAL, '04', year),
+            'n_detailed': None, 'n_candidates': len(detailed), 'top': top, 'groups': groups,
+            'last_updated': None, 'fetched': True}

@@ -452,14 +452,44 @@ def build_tic_fred(cfg):
 
 
 # ---------------------------------------------------------------- employment by detailed industry
-def build_industries(cfg):
-    """A curated two-level list of industries with current employment, changes, and a yearly history."""
+def build_industries(cfg, prev=None):
+    """A curated two-level list of industries with current employment, changes, and a yearly history.
+    Rows marked bls: true are not on FRED and come from the BLS API: the last ten years each run,
+    spliced onto the monthly history cached in the previous data file (fetched in full only once)."""
     rows, errors = [], {}
     total_obs = None
+    bls_rows = [r for r in cfg['rows'] if r.get('bls')]
+    bls_data, bls_err = {}, None
+    if bls_rows:
+        ids = [r['series'] for r in bls_rows]
+        y = TODAY_ET.year
+        cache = {r.get('series'): [tuple(o) for o in r['obs_cache']] for r in (prev or {}).get('rows', []) if r.get('obs_cache')}
+        try:
+            recent = bls_series(ids, y - 9, y)
+            need = [i for i in ids if not cache.get(i) or cache[i][0][0] > f'{y - 9}-01-01']
+            hist = {i: [] for i in ids}
+            for start in (range(1990, y - 9, 10) if need else []):
+                chunk = bls_series(need, start, min(start + 9, y - 10))
+                for i in need:
+                    hist[i] += chunk.get(i, [])
+            for i in ids:
+                new_obs = recent.get(i) or []
+                base = hist[i] if i in need else cache.get(i, [])
+                if new_obs:
+                    bls_data[i] = sorted([o for o in base if o[0] < new_obs[0][0]] + new_obs)
+        except Exception as e:  # noqa: BLE001
+            bls_err = f'{type(e).__name__}: {e}'
+            log(f'note  industries: BLS API: {bls_err}')
     for r in cfg['rows']:
         try:
-            sid = fred_resolve(r['series'], r.get('title'))
-            obs = fred_obs(sid)
+            if r.get('bls'):
+                sid = r['series']
+                obs = bls_data.get(sid)
+                if not obs:
+                    raise RuntimeError(bls_err or f'BLS API returned no observations for {sid}')
+            else:
+                sid = fred_resolve(r['series'], r.get('title'))
+                obs = fred_obs(sid)
             f = float(r.get('factor', 1))
             obs = [(d, v * f) for d, v in obs]
         except Exception as e:  # noqa: BLE001
@@ -481,7 +511,10 @@ def build_industries(cfg):
                 hv.append(round(v, 1))
         row = {'name': r['name'], 'level': int(r.get('level', 0)), 'series': sid, 'value': last_v, 'as_of': last_d,
                'prev_year': prev1, 'prev_10y': prev10, 'prev_25y': prev25, 'hist': {'x': hx, 'v': hv},
-               'note': r.get('note', ''), 'outside': bool(r.get('outside'))}
+               'note': r.get('note', ''), 'short': r.get('short', ''), 'outside': bool(r.get('outside')),
+               'source': 'bls' if r.get('bls') else 'fred'}
+        if r.get('bls'):
+            row['obs_cache'] = [[d, round(v, 3)] for d, v in obs]
         rows.append(row)
         if r.get('total'):
             total_obs = row
@@ -576,7 +609,41 @@ def census_nim():
 
 
 # ---------------------------------------------------------------- sources
-def fetch_source(src, freq):
+BLS_API = 'https://api.bls.gov/publicAPI/v2/timeseries/data/'
+
+
+def bls_series(ids, start, end, annual=False):
+    """Observations for BLS series ids from the public API, one request: monthly series as
+    (YYYY-MM-01, value), or with annual=True the yearly values as (year, value).
+    Without a registration key the API allows 25 requests a day and ten years per
+    request, so callers keep requests few; with BLS_API_KEY set the limits are higher."""
+    payload = {'seriesid': list(ids), 'startyear': str(start), 'endyear': str(end)}
+    key = os.environ.get('BLS_API_KEY', '').strip()
+    if key:
+        payload['registrationkey'] = key
+    r = S.post(BLS_API, json=payload, timeout=90, headers={'Content-Type': 'application/json'})
+    r.raise_for_status()
+    j = r.json()
+    if j.get('status') != 'REQUEST_SUCCEEDED':
+        raise RuntimeError(f'BLS API {j.get("status")}: ' + '; '.join(j.get('message') or []))
+    out = {}
+    for ser in j.get('Results', {}).get('series', []):
+        obs = []
+        for d in ser.get('data', []):
+            per = d.get('period', '')
+            try:
+                if annual:
+                    if per == 'A01':
+                        obs.append((int(d['year']), float(d['value'])))
+                elif per.startswith('M') and per != 'M13':
+                    obs.append((f"{d['year']}-{per[1:]}-01", float(d['value'])))
+            except (ValueError, KeyError):
+                continue
+        out[ser['seriesID']] = sorted(obs)
+    return out
+
+
+def fetch_source(src, freq, prev_entry=None):
     t = src['type']
     if t == 'fred':
         sid = fred_resolve(src['series'], src.get('title'))
@@ -614,6 +681,42 @@ def fetch_source(src, freq):
             obs = apply_transform(fred_obs(ln['series'], ln.get('title')), ln, freq)
             lines.append({'label': ln['label'], 'series': ln['series'], 'obs': [[d, round(v, 6)] for d, v in sorted(obs)]})
         meta = fred_meta(src['lines'][0]['series'])
+        meta['lines'] = lines
+        return lines[0]['obs'], meta
+    if t == 'bls_multi':
+        # Several BLS series straight from the BLS API, cached: the last ten years are
+        # re-fetched every run (one request, covers the annual revisions) and spliced onto
+        # the history kept in the previous data file; the full history is fetched only
+        # when there is nothing cached for the series.
+        ids = [ln['series'] for ln in src['lines']]
+        y = TODAY_ET.year
+        cached = {ln.get('series'): [tuple(o) for o in ln.get('obs', [])] for ln in (prev_entry or {}).get('lines', [])}
+        recent = bls_series(ids, y - 9, y)
+        need_full = any(not cached.get(i) or cached[i][0][0] > f'{y - 9}-01-01' for i in ids)
+        hist = {i: [] for i in ids}
+        if need_full:
+            first = int(src.get('start_year', 1948))
+            for start in range(first, y - 9, 10):
+                chunk = bls_series(ids, start, min(start + 9, y - 10))
+                for i in ids:
+                    hist[i] += chunk.get(i, [])
+        lines = []
+        for ln in src['lines']:
+            i = ln['series']
+            new_obs = recent.get(i) or []
+            if not new_obs:
+                raise RuntimeError(f'BLS {i}: no observations returned')
+            base = hist[i] if need_full else cached.get(i, [])
+            obs = [o for o in base if o[0] < new_obs[0][0]] + new_obs
+            obs = apply_transform(sorted(obs), ln, freq)
+            lines.append({'label': ln['label'], 'series': i, 'obs': [[d, round(v, 6)] for d, v in sorted(obs)]})
+        meta = {}
+        if src.get('meta_series'):
+            try:
+                meta = fred_meta(src['meta_series'])
+            except Exception as e:  # noqa: BLE001
+                log(f'note  bls_multi: metadata from FRED {src["meta_series"]} unavailable: {e}')
+        meta.setdefault('last_updated', lines[0]['obs'][-1][0] + ' 00:00:00-05')
         meta['lines'] = lines
         return lines[0]['obs'], meta
     raise ValueError(f'unknown source type {t}')
@@ -827,12 +930,12 @@ def main():
         sid = cfg['id']
         entry = {k: v for k, v in cfg.items() if k != 'source'}
         entry['sid'] = cfg.get('sid_override') or (cfg['source'].get('series') if cfg['source']['type'] == 'fred' else '')
-        if not entry['sid'] and cfg['source']['type'] == 'fred_multi':
+        if not entry['sid'] and cfg['source']['type'] in ('fred_multi', 'bls_multi'):
             entry['sid'] = ' / '.join(ln['series'] for ln in cfg['source']['lines'])
         if not entry.get('url'):
             entry['url'] = f'https://fred.stlouisfed.org/series/{entry["sid"]}' if entry['sid'] else ''
         try:
-            obs, meta = fetch_source(cfg['source'], cfg['freq'])
+            obs, meta = fetch_source(cfg['source'], cfg['freq'], prev_series.get(sid))
             obs = sorted(obs)
             entry['obs'] = [[d, round(v, 6)] for d, v in obs]
             if meta.get('lines'):
@@ -1019,21 +1122,21 @@ def main():
             w.writerow(['maturity_year'] + maturity['wall']['types'])
             for y, amts in zip(maturity['wall']['years'], maturity['wall']['amounts']):
                 w.writerow([y] + [round(a, 3) for a in amts])
-    industries = extra_block('industries', lambda: build_industries(man['industries'])) if man.get('industries') else {}
+    industries = extra_block('industries', lambda: build_industries(man['industries'], prev.get('industries'))) if man.get('industries') else {}
     if industries.get('rows'):
         industries['updated'] = fmt_date(industries.get('last_updated'))
         industries['next'] = fmt_date(next_by_release[industries['release_id']]) if industries.get('release_id') in next_by_release else ''
         log(f'ok    industries     {len(industries["rows"])} rows as of {industries["as_of"]}, total {industries["total"]:.0f}k' + (f'; {len(industries["errors"])} failed: {list(industries["errors"])}' if industries.get('errors') else ''))
         with open(os.path.join(CSVDIR, 'employment_by_industry.csv'), 'w', newline='') as f:
             w = csv.writer(f)
-            w.writerow(['industry', 'level', 'fred_series', 'as_of', 'employment_thousands', 'year_earlier', 'ten_years_earlier', 'share_of_nonfarm_pct'])
+            w.writerow(['industry', 'level', 'series', 'as_of', 'employment_thousands', 'year_earlier', 'ten_years_earlier', 'share_of_nonfarm_pct'])
             for r in industries['rows']:
                 w.writerow([r['name'], r['level'], r['series'], r['as_of'], r['value'], r['prev_year'], r['prev_10y'], round(r['share'], 3) if r['share'] is not None else ''])
-    occupations = extra_block('occupations', lambda: extras.build_occupations(S, TODAY_ET))
+    occupations = extra_block('occupations', lambda: extras.build_occupations(bls_series, TODAY_ET, prev.get('occupations')))
     if occupations.get('top'):
         occupations['updated'] = f'May {occupations["year"]} survey'
         occupations['next'] = f'May {occupations["year"] + 1} estimates, published the following spring'
-        log(f'ok    occupations    May {occupations["year"]}: {occupations["n_detailed"]} occupations, total {occupations["total_emp"]:.0f}; top: ' + ', '.join(f'{t["title"]} {t["emp"]:.0f}' for t in occupations['top'][:5]))
+        log(f'ok    occupations    May {occupations["year"]}' + ('' if occupations.get('fetched') else ' (cached)') + f': total {occupations["total_emp"]:.0f}, median ${occupations.get("median_all") or 0:.0f}; top: ' + ', '.join(f'{t["title"]} {t["emp"]:.0f}' for t in occupations['top'][:5]))
         with open(os.path.join(CSVDIR, 'occupations_top.csv'), 'w', newline='') as f:
             w = csv.writer(f)
             w.writerow(['soc_code', 'occupation', 'employment', 'share_pct', 'median_annual_wage'])

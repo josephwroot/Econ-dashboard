@@ -33,6 +33,7 @@ jobs:
       - name: Fetch data
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
         run: python build/fetch.py
       - name: Commit data
         run: |

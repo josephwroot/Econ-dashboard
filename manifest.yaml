@@ -122,12 +122,13 @@ series:
     fmt: pct1
     axis: pct
     source:
-      type: fred_multi
+      type: bls_multi
+      meta_series: LNS11300060
       lines:
-        - {label: Men, series: LRAC25MAUSM156S, title: "Infra-Annual Labor Statistics: Labor Force Participation Rate Male: From 25 to 54 Years for United States"}
-        - {label: Women, series: LRAC25FEUSM156S, title: "Infra-Annual Labor Statistics: Labor Force Participation Rate Female: From 25 to 54 Years for United States"}
-    src_label: BLS data as compiled by the OECD, via FRED
-    url: https://fred.stlouisfed.org/series/LRAC25FEUSM156S
+        - {label: Men, series: LNS11300061}
+        - {label: Women, series: LNS11300062}
+    src_label: BLS, Current Population Survey
+    url: https://data.bls.gov/timeseries/LNS11300062
     freq_label: Monthly, seasonally adjusted
     note: Restricted to ages 25 to 54 so that the aging of the population does not move the rates; the overall participation rate falls as the 65-and-over share of adults rises even when no age group changes its behavior. Women's rate rose from about 40 percent in the 1950s to around 78 percent and is near its highest; men's has drifted down from 97 percent to about 89.
 
@@ -635,7 +636,7 @@ extra_releases:
 # Where people work: a curated two-level list of industries from the payroll survey (CES) on FRED.
 # level 0 rows are sectors, level 1 rows sit inside the sector above them. Thousands of jobs.
 # 'title' is the exact FRED title, used to find the series again if an id is ever retired;
-# 'short' is a display name for narrow layouts.
+# 'short' is a display name for narrow layouts; 'bls: true' marks a series FRED does not carry, read from the BLS API.
 industries:
   rows:
     - {name: Total nonfarm payrolls, series: PAYEMS, title: "All Employees, Total Nonfarm", level: 0, total: true}
@@ -653,7 +654,7 @@ industries:
     - {name: "Federal government, civilian", series: CES9091000001, title: "All Employees, Federal", level: 1}
     - {name: U.S. Postal Service, series: CES9091912001, title: "All Employees, U.S. Postal Service", level: 1}
     - {name: Retail trade, series: USTRADE, title: "All Employees, Retail Trade", level: 0}
-    - {name: General merchandise stores, series: CES4245500001, title: "All Employees, General Merchandise Retailers", level: 1}
+    - {name: General merchandise stores, series: CES4245200001, title: "All Employees, General Merchandise Retailers", level: 1}
     - {name: Grocery and other food stores, series: CES4244500001, title: "All Employees, Food and Beverage Retailers", level: 1}
     - {name: Leisure and hospitality, series: USLAH, title: "All Employees, Leisure and Hospitality", level: 0}
     - {name: Restaurants and bars, series: CES7072200001, title: "All Employees, Food Services and Drinking Places", level: 1}
@@ -663,20 +664,20 @@ industries:
     - {name: Computer systems design and related services, short: Computer systems design, series: CES6054150001, title: "All Employees, Computer Systems Design and Related Services", level: 1}
     - {name: Management and technical consulting, short: Consulting, series: CES6054160001, title: "All Employees, Management, Scientific, and Technical Consulting Services", level: 1}
     - {name: Architecture and engineering services, short: Architecture and engineering, series: CES6054130001, title: "All Employees, Architectural, Engineering, and Related Services", level: 1}
-    - {name: Scientific research and development services, short: Scientific R&D services, series: CES6054170001, title: "All Employees, Scientific Research and Development Services", level: 1}
+    - {name: Scientific research and development services, short: Scientific R&D services, series: CES6054170001, bls: true, level: 1}
     - {name: Legal services, series: CES6054110001, title: "All Employees, Legal Services", level: 1}
     - {name: "Accounting, tax, and payroll services", short: Accounting and payroll services, series: CES6054120001, title: "All Employees, Accounting, Tax Preparation, Bookkeeping, and Payroll Services", level: 1}
     - {name: Employment services (temp and staffing agencies), series: CES6056130001, title: "All Employees, Employment Services", level: 1}
     - {name: Manufacturing, series: MANEMP, title: "All Employees, Manufacturing", level: 0}
     - {name: Food manufacturing, series: CES3231100001, title: "All Employees, Food Manufacturing", level: 1}
     - {name: Motor vehicles and parts, series: CES3133600101, title: "All Employees, Motor Vehicles and Parts", level: 1}
-    - {name: Aerospace products and parts, series: CES3133640001, title: "All Employees, Aerospace Product and Parts Manufacturing", level: 1}
+    - {name: Aerospace products and parts, series: CES3133640001, bls: true, level: 1}
     - {name: Computers and electronic products, series: CES3133400001, title: "All Employees, Computer and Electronic Products", level: 1}
     - {name: Fabricated metal products, series: CES3133200001, title: "All Employees, Fabricated Metal Products", level: 1}
     - {name: Machinery, series: CES3133300001, title: "All Employees, Machinery", level: 1}
     - {name: Chemicals (including pharmaceuticals), series: CES3232500001, title: "All Employees, Chemicals", level: 1}
     - {name: Construction, series: USCONS, title: "All Employees, Construction", level: 0}
-    - {name: Transportation and warehousing, short: Transport and warehousing, series: CES4348000001, title: "All Employees, Transportation and Warehousing", level: 0}
+    - {name: Transportation and warehousing, short: Transport and warehousing, series: CES4300000001, title: "All Employees, Transportation and Warehousing", level: 0}
     - {name: Trucking, series: CES4348400001, title: "All Employees, Truck Transportation", level: 1}
     - {name: Warehousing and storage, series: CES4349300001, title: "All Employees, Warehousing and Storage", level: 1}
     - {name: Couriers and package delivery, series: CES4349200001, title: "All Employees, Couriers and Messengers", level: 1}
@@ -685,14 +686,14 @@ industries:
     - {name: Insurance, series: CES5552400001, title: "All Employees, Insurance Carriers and Related Activities", level: 1}
     - {name: Banks and other lenders, series: CES5552200001, title: "All Employees, Credit Intermediation and Related Activities", level: 1}
     - {name: Real estate, series: CES5553100001, title: "All Employees, Real Estate", level: 1}
-    - {name: Wholesale trade, series: CES4142000001, title: "All Employees, Wholesale Trade", level: 0}
+    - {name: Wholesale trade, series: USWTRADE, title: "All Employees, Wholesale Trade", level: 0}
     - {name: Private schools and colleges, series: CES6561000001, title: "All Employees, Private Educational Services", level: 0}
-    - {name: Private colleges and universities, series: CES6561130001, title: "All Employees, Colleges, Universities, and Professional Schools", level: 1}
+    - {name: Private colleges and universities, series: CES6561130001, bls: true, level: 1}
     - {name: Other services, series: USSERV, title: "All Employees, Other Services", level: 0}
     - {name: "Religious, civic, and professional organizations", short: Religious and civic organizations, series: CES8081300001, title: "All Employees, Religious, Grantmaking, Civic, Professional, and Similar Organizations", level: 1}
     - {name: Repair and maintenance, series: CES8081100001, title: "All Employees, Repair and Maintenance", level: 1}
     - {name: Information, series: USINFO, title: "All Employees, Information", level: 0}
-    - {name: Software publishers, series: CES5051320001, title: "All Employees, Software Publishers", level: 1}
+    - {name: Software publishers, series: CES5051320001, bls: true, level: 1}
     - {name: Telecommunications, series: CES5051700001, title: "All Employees, Telecommunications", level: 1}
     - {name: Mining and logging, series: USMINE, title: "All Employees, Mining and Logging", level: 0}
     - {name: Oil and gas extraction, series: CES1021100001, title: "All Employees, Oil and Gas Extraction", level: 1}
