@@ -792,9 +792,10 @@ def build_gss_religion(session, today, prev=None):
     with pd.io.stata.StataReader(dpath, convert_categoricals=False) as rdr:
         names = {v.lower(): v for v in rdr.variable_labels()}
         need = {'year': names.get('year'), 'relig': names.get('relig'), 'attend': names.get('attend')}
-        # weights: the composite weight where it exists, then the post-stratified weights NORC
-        # recommends for the web-era waves, then the older weight; coalesced row by row
-        wcols = [names[w] for w in ('wtsscomp', 'wtssnrps', 'wtssps', 'wtssall', 'wtss') if w in names]
+        # weights, coalesced row by row: the post-stratification weight WTSSPS, which NORC computes
+        # the same way for every year including the web-era waves, then the nonresponse-adjusted
+        # WTSSNRPS (2004 on), then the original WTSSALL
+        wcols = [names[w] for w in ('wtssps', 'wtsscomp', 'wtssnrps', 'wtssall', 'wtss') if w in names]
         missing = [k for k, v in need.items() if not v]
         if missing:
             raise RuntimeError(f'GSS file lacks {missing}; has {len(names)} variables')

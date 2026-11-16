@@ -645,7 +645,7 @@ comp:
     mode_labels: {share: Share of adults}
     src_label: General Social Survey (NORC)
     url: https://gss.norc.org/get-the-data/stata
-    freq_label: Yearly from 1972, every two years since 1994; adults 18 and over, weighted with the survey's composite weight
+    freq_label: Yearly from 1972, every two years since 1994; adults 18 and over, weighted with NORC's post-stratification weight (WTSSPS), which is built the same way for every year
     note: Answers to "What is your religious preference?" Protestant includes nondenominational and "just Christian" answers; other religion covers Muslims, Buddhists, Hindus, Orthodox Christians and the rest, each under 2 percent of adults. The GSS switched from in-person interviews to mostly web questionnaires in 2021, and NORC cautions that part of that year's jump in "no religion" reflects the change in mode; later waves mix the two. The 1972 to 1974 surveys sampled households rather than adults, which the weights correct only in part.
 
 extra_releases:
