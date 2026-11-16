@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-16T14:49:01+00:00",
+ "generated_at": "2026-11-16T16:57:25+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -29,6 +29,7 @@
   "outlays",
   "receipts",
   "gdi_types",
+  "age_structure",
   "payrolls_sector",
   "lf_sex",
   "debt_holders",
