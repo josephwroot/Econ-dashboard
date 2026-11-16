@@ -758,7 +758,7 @@ def build_gss_religion(session, today, prev=None):
         except ValueError:
             age = 10 ** 6
         if age < GSS_REFRESH_DAYS:
-            out = {k: prev[k] for k in ('snapshot', 'hist', 'extras', 'fetched_on', 'release', 'last_updated', 'updated_text', 'next', 'source_url', 'n_latest') if k in prev}
+            out = {k: prev[k] for k in ('snapshot', 'hist', 'extras', 'fetched_on', 'release', 'last_updated', 'updated_text', 'next', 'source_url', 'n_latest', 'weights', 'unweighted_years') if k in prev}
             out['fetched'] = False
             return out
     import pandas as pd  # imported here so the rest of the build does not need it
@@ -789,23 +789,31 @@ def build_gss_religion(session, today, prev=None):
     with pd.io.stata.StataReader(dpath, convert_categoricals=False) as rdr:
         names = {v.lower(): v for v in rdr.variable_labels()}
         need = {'year': names.get('year'), 'relig': names.get('relig'), 'attend': names.get('attend')}
-        wcol = next((names[w] for w in ('wtsscomp', 'wtssall', 'wtss') if w in names), None)
+        # weights: the composite weight where it exists, then the post-stratified weights NORC
+        # recommends for the web-era waves, then the older weight; coalesced row by row
+        wcols = [names[w] for w in ('wtsscomp', 'wtssnrps', 'wtssps', 'wtssall', 'wtss') if w in names]
         missing = [k for k, v in need.items() if not v]
         if missing:
             raise RuntimeError(f'GSS file lacks {missing}; has {len(names)} variables')
-        cols = [need['year'], need['relig'], need['attend']] + ([wcol] if wcol else [])
+        cols = [need['year'], need['relig'], need['attend']] + wcols
         df = rdr.read(columns=cols)
-    df.columns = ['year', 'relig', 'attend'] + (['w'] if wcol else [])
-    if 'w' not in df:
-        df['w'] = 1.0
+    df.columns = ['year', 'relig', 'attend'] + [f'w{i}' for i in range(len(wcols))]
     try:
         os.remove(dpath)
     except OSError:
         pass
     df = df.apply(pd.to_numeric, errors='coerce')
     df = df[df['year'] > 1900]
-    df['w'] = df['w'].where(df['w'] > 0, 0.0)
+    w = pd.Series(float('nan'), index=df.index)
+    for i in range(len(wcols)):
+        c = df[f'w{i}']
+        w = w.where(w > 0, c.where(c > 0))
+    df['w'] = w.fillna(0.0)
     years = sorted(int(y) for y in df['year'].dropna().unique())
+    # a wave with no usable weight at all is tabulated unweighted rather than dropped
+    unweighted = [y for y in years if df.loc[df['year'] == y, 'w'].sum() <= 0]
+    for y in unweighted:
+        df.loc[df['year'] == y, 'w'] = 1.0
 
     def shares(col, groups):
         valid = df[df[col] >= 0]
@@ -840,6 +848,7 @@ def build_gss_religion(session, today, prev=None):
                'modes': ['share'], 'vfmt': 'pct', 'mode_labels': {'share': 'Share of adults'},
                'note': 'Answers to "How often do you attend religious services?", grouped. Self-reported attendance runs well above counts taken at the door.'}]
     return {'snapshot': snapshot, 'hist': hist, 'extras': extras, 'n_latest': n_rel[li],
+            'weights': wcols, 'unweighted_years': unweighted,
             'release': release, 'source_url': GSS_URL, 'fetched_on': today.isoformat(),
             'last_updated': today.isoformat() + ' 00:00:00-05',
             'updated_text': f'{today.strftime("%b %-d, %Y")} (GSS {release}, latest wave {latest})',

@@ -1003,6 +1003,8 @@ def main():
             elif stype == 'gss':
                 entry.update(extras.build_gss_religion(S, TODAY_ET, prev_comp.get(cid)))
                 entry['cats'] = [{'name': n} for n, _ in entry['snapshot']['cats']]
+                if entry.get('fetched'):
+                    log(f'note  religion: weights {entry.get("weights")}; unweighted years {entry.get("unweighted_years")}; n latest {entry.get("n_latest")}')
             else:
                 entry.update(build_comp(cfg, gdp_fy))
             entry['updated'] = entry.get('updated_text') or fmt_date(entry['last_updated'])
@@ -1015,7 +1017,7 @@ def main():
                 w = csv.writer(f)
                 w.writerow(['period'] + [n for n, _ in hx['cats']] + (['gdp_billions'] if hx.get('gdp') else []))
                 for i, lab in enumerate(hx['labels']):
-                    w.writerow([lab] + [round(vals[i], 3) for _, vals in hx['cats']] + ([hx['gdp'][i]] if hx.get('gdp') else []))
+                    w.writerow([lab] + [round(vals[i], 3) if vals[i] is not None else '' for _, vals in hx['cats']] + ([hx['gdp'][i]] if hx.get('gdp') else []))
         except Exception as e:  # noqa: BLE001
             err = f'{type(e).__name__}: {e}'
             log(f'FAIL  {cid:14s} {err}')
