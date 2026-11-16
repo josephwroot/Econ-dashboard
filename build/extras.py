@@ -754,7 +754,7 @@ GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
-GSS_METHOD = 'wtssps-first/13cats'  # bump to force a re-read after a change in how the shares are computed
+GSS_METHOD = 'wtssps-first/13cats/labels'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -803,26 +803,43 @@ def build_gss_religion(session, today, prev=None):
         names = {v.lower(): v for v in rdr.variable_labels()}
         need = {'year': names.get('year'), 'relig': names.get('relig'), 'attend': names.get('attend')}
         opt = {'denom': names.get('denom'), 'other': names.get('other')}
-        # value labels of OTHER, to find the Latter-day Saints codes without hard-coding them
-        lds_codes = set()
-        lds_note = ''
+        # value labels, so that denominations are matched by name rather than by code numbers
+        lds_codes, denom_fam, lds_note = set(), {}, ''
+        diag = {}
         try:
             vls = rdr.value_labels()
-            lab = None
-            for key in (opt['other'], 'other', 'OTHER'):
-                if key in vls:
-                    lab = vls[key]
-                    break
-            if lab is None:
-                lbl = getattr(rdr, '_lbllist', None) or getattr(rdr, 'lbllist', None)
-                vl = getattr(rdr, '_varlist', None) or getattr(rdr, 'varlist', None)
-                if lbl and vl and opt['other'] in vl:
-                    lab = vls.get(lbl[list(vl).index(opt['other'])])
-            if lab:
-                lds_codes = {int(k) for k, v in lab.items() if re.search(r'latter.?day|mormon|\blds\b', str(v), re.I)}
+            lbl = getattr(rdr, '_lbllist', None) or getattr(rdr, 'lbllist', None)
+            vl = getattr(rdr, '_varlist', None) or getattr(rdr, 'varlist', None)
+
+            def labels_for(var):
+                for key in (var, str(var).lower(), str(var).upper()):
+                    if key in vls:
+                        return vls[key]
+                if lbl and vl and var in list(vl):
+                    return vls.get(lbl[list(vl).index(var)]) or {}
+                return {}
+            lab = labels_for(opt['other']) if opt['other'] else {}
+            lds_codes = {int(k) for k, v in lab.items() if re.search(r'latter.?day|mormon|\blds\b', str(v), re.I)}
+            diag['lds_labels'] = {int(k): str(v) for k, v in lab.items() if int(k) in lds_codes}
+            dlab = labels_for(opt['denom']) if opt['denom'] else {}
+            for k, v in dlab.items():
+                t = str(v).lower()
+                fam = ('Baptist' if 'bapt' in t else 'Methodist' if 'meth' in t else 'Lutheran' if 'luth' in t
+                       else 'Presbyterian' if 'presb' in t else 'Episcopal' if 'episcopal' in t
+                       else 'Nondenominational' if 'no denom' in t or 'nondenom' in t or 'non-denom' in t
+                       else 'Other Protestant' if t.strip() == 'other' or t.startswith('other') else None)
+                if fam:
+                    denom_fam[int(k)] = fam
+            diag['denom_labels'] = {int(k): str(v) for k, v in list(dlab.items())[:40]}
         except Exception as e:  # noqa: BLE001
-            lds_codes = set()
             lds_note = f'{type(e).__name__}: {e}'
+        if not denom_fam:  # fall back to the documented code ranges
+            denom_fam = {**{c: 'Baptist' for c in range(10, 20)}, **{c: 'Methodist' for c in range(20, 30)},
+                         **{c: 'Lutheran' for c in range(30, 40)}, **{c: 'Presbyterian' for c in range(40, 50)},
+                         50: 'Episcopal', 60: 'Other Protestant', 70: 'Nondenominational'}
+            diag['denom_source'] = 'code ranges'
+        else:
+            diag['denom_source'] = f'{len(denom_fam)} labelled codes'
         # weights, coalesced row by row: the post-stratification weight WTSSPS, which NORC computes
         # the same way for every year including the web-era waves, then the nonresponse-adjusted
         # WTSSNRPS (2004 on), then the original WTSSALL
@@ -858,21 +875,25 @@ def build_gss_religion(session, today, prev=None):
     import numpy as np
     r, dn, ot = df['relig'], df['denom'], df['other']
     lds = ot.isin(lds_codes) if lds_codes else pd.Series(False, index=df.index)
+    fam = dn.map(denom_fam)
     conds = [
         r == 4, r == 2, r == 3, r == 9, r.isin([5, 6, 7, 8, 12]), r == 10,
         lds & r.isin([1, 11, 13]),
         r.isin([11, 13]),
-        (r == 1) & (dn >= 10) & (dn < 20), (r == 1) & (dn >= 20) & (dn < 30), (r == 1) & (dn >= 30) & (dn < 40),
-        (r == 1) & (dn >= 40) & (dn < 50), (r == 1) & (dn >= 50) & (dn < 60), (r == 1) & (dn == 70), r == 1,
+        (r == 1) & fam.notna(), r == 1,
     ]
     choices = [
         'No religion', 'Catholic', 'Jewish', 'Muslim', 'Other religion', 'Other Christian',
         'Other Christian',
         'Nondenominational',
-        'Baptist', 'Methodist', 'Lutheran',
-        'Presbyterian', 'Episcopal', 'Nondenominational', 'Other Protestant',
+        fam.fillna(''), 'Other Protestant',
     ]
     df['cat'] = np.select(conds, choices, default='')
+    # diagnostics for the log: how the latest wave's Protestants are spread over denomination codes
+    lastyr = df['year'].max()
+    pr = df[(df['year'] == lastyr) & (df['relig'] == 1)]
+    diag['denom_latest'] = {int(k): round(float(v), 1) for k, v in pr['denom'].value_counts().head(12).items()}
+    diag['cats_latest'] = {k: int(v) for k, v in df.loc[df['year'] == lastyr, 'cat'].value_counts().items()}
 
     def shares(col, groups, valid_mask=None):
         valid = df[valid_mask] if valid_mask is not None else df[df[col] >= 0]
@@ -915,7 +936,7 @@ def build_gss_religion(session, today, prev=None):
                'modes': ['share'], 'vfmt': 'pct', 'mode_labels': {'share': 'Share of adults'},
                'note': 'Answers to "How often do you attend religious services?", grouped. Self-reported attendance runs well above counts taken at the door.'}]
     return {'snapshot': snapshot, 'hist': hist, 'extras': extras, 'n_latest': n_rel[li],
-            'weights': wcols, 'unweighted_years': unweighted, 'method': GSS_METHOD, 'lds_codes': sorted(lds_codes), 'lds_note': lds_note,
+            'weights': wcols, 'unweighted_years': unweighted, 'method': GSS_METHOD, 'lds_codes': sorted(lds_codes), 'lds_note': lds_note, 'diag': diag,
             'release': release, 'source_url': GSS_URL, 'fetched_on': today.isoformat(),
             'last_updated': today.isoformat() + ' 00:00:00-05',
             'updated_text': f'{today.strftime("%b %-d, %Y")} (GSS {release}, latest wave {latest})',

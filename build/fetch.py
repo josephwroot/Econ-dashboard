@@ -1005,7 +1005,7 @@ def main():
                 given = {c['name']: c for c in cfg.get('cats', [])}
                 entry['cats'] = [given.get(n, {'name': n}) for n, _ in entry['snapshot']['cats']]
                 if entry.get('fetched'):
-                    log(f'note  religion: weights {entry.get("weights")}; unweighted years {entry.get("unweighted_years")}; n latest {entry.get("n_latest")}; LDS codes {entry.get("lds_codes")} {entry.get("lds_note") or ""}')
+                    log(f'note  religion: weights {entry.get("weights")}; unweighted years {entry.get("unweighted_years")}; n latest {entry.get("n_latest")}; LDS codes {entry.get("lds_codes")} {entry.get("lds_note") or ""}; diag {json.dumps(entry.get("diag"))[:1500]}')
             else:
                 entry.update(build_comp(cfg, gdp_fy))
             entry['updated'] = entry.get('updated_text') or fmt_date(entry['last_updated'])
