@@ -358,6 +358,14 @@ def build_fred_comp(cfg):
     latest = dates[-1]
     cur_cats, cur_total = cats_at(latest)
     prev_total = cats_at(dates[-1 - per])[1] if len(dates) > per else None
+    headline = None
+    hl = cfg.get('headline')
+    if hl:
+        def hsum(d):
+            return sum(v for n, v in cats_at(d)[0] if n in hl['cats'])
+        headline = {'name': hl['name'], 'value': hsum(latest),
+                    'prev': hsum(dates[-1 - per]) if len(dates) > per else None,
+                    'delta': hl.get('delta', 'pct')}
     hist = {c['name']: [] for c in cfg['cats']}
     for d in dates:
         cats, _ = cats_at(d)
@@ -372,7 +380,8 @@ def build_fred_comp(cfg):
             memo_out = None
     return {
         'snapshot': {'period': period_label(latest, freq), 'total': cur_total, 'prev_total': prev_total,
-                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest, 'memo': memo_out},
+                     'prev_label': 'vs year ago', 'cats': cur_cats, 'as_of': latest, 'memo': memo_out,
+                     'headline': headline},
         'hist': {'x': [year_frac(d) for d in dates], 'labels': [period_label(d, freq) for d in dates],
                  'cats': [[n, hist[n]] for n in hist], 'gdp': None,
                  'title': f'Since {period_label(dates[0], freq)}'},
@@ -915,7 +924,7 @@ def main():
         if c.get('release_id') in next_by_release:
             c['next'] = fmt_date(next_by_release[c['release_id']])
         elif c.get('source', {}).get('type') == 'fred_comp':
-            c['next'] = c.get('next') or ''
+            c['next'] = c.get('next') or c.get('next_text') or ''
         elif c.get('source', {}).get('type') in ('tic_mfh', 'tic_fred'):
             c['next'] = c.get('next') or 'Around the 15th of each month, for the month six weeks earlier'
         else:

@@ -350,7 +350,13 @@ function miniStackedSVG(c){
   return '<div class="mini-cap">'+esc((c.hist.title||'History')+', '+modeLabel(c,mode).toLowerCase())+'</div><svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+g+'</svg>';
 }
 function bn(v){return Math.abs(v)>=1000?(v<0?minus:'')+'$'+(Math.abs(v)/1000).toFixed(2)+'T':(v<0?minus:'')+'$'+Math.round(Math.abs(v))+'B';}
-var VFMT={usd_bn:bn,jobs_k:function(v){return (v<0?minus:'')+(+(Math.abs(v)/1000).toFixed(1))+'M';},persons_k:function(v){return (v<0?minus:'')+(+(Math.abs(v)/1000).toFixed(1))+'M';}};
+var VFMT={usd_bn:bn,jobs_k:function(v){return (v<0?minus:'')+(+(Math.abs(v)/1000).toFixed(1))+'M';},persons_k:function(v){return (v<0?minus:'')+(+(Math.abs(v)/1000).toFixed(1))+'M';},pct:function(v){return num(v,1)+'%';}};
+function headlineOf(c){var sn=c.snapshot,h=sn&&sn.headline,vf=vfmtOf(c);
+  if(!h||h.value==null)return {num:vf(sn.total),chip:sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':''};
+  var chip='';
+  if(h.prev!=null)chip=h.delta==='pt'?'<span class="chip"><b>'+sgn(h.value-h.prev,' pt',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'<span class="chip"><b>'+sgn((h.value/h.prev-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>';
+  return {num:vf(h.value),chip:'<span class="chip"><b>'+esc(h.name)+'</b></span>'+chip};}
+function ratioChip(c){var sn=c.snapshot;if(!sn||!sn.headline||c.vfmt!=='pct')return '';var dep=sn.headline.value,work=sn.total-dep;if(!(work>0))return '';return '<span class="chip"><b>'+(dep/work).toFixed(2)+'</b> dependents per working-age person</span>';}
 function vfmtOf(c){return VFMT[c.vfmt]||bn;}
 var MODE_LABELS={gdp:'% of GDP',usd:'Dollars',share:'Share of total',level:'Level'};
 function modeLabel(c,m){return (c.mode_labels&&c.mode_labels[m])||MODE_LABELS[m]||m;}
@@ -360,7 +366,7 @@ function memoChip(c){var m=c.snapshot&&c.snapshot.memo;if(!m||m.value==null)retu
 function barsHTML(c,big){
   var cats=c.snapshot.cats,total=c.snapshot.total,max=Math.max.apply(null,cats.map(function(x){return Math.abs(x[1]);})),vf=vfmtOf(c);
   return '<div class="bars'+(big?' big':'')+'">'+cats.map(function(x,k){
-    return '<span class="bl" title="'+esc(x[0])+'">'+esc(x[0])+'</span><span class="bt"><span class="bf" style="width:'+(Math.max(0,x[1])/max*100).toFixed(1)+'%;background:'+catColor(c,k,c.cats)+'"></span></span><span class="bv">'+vf(x[1])+(big&&total?' <span class="sh">'+(x[1]/total*100).toFixed(0)+'%</span>':'')+'</span>';
+    return '<span class="bl" title="'+esc(x[0])+'">'+esc(x[0])+'</span><span class="bt"><span class="bf" style="width:'+(Math.max(0,x[1])/max*100).toFixed(1)+'%;background:'+catColor(c,k,c.cats)+'"></span></span><span class="bv">'+vf(x[1])+(big&&total&&c.vfmt!=='pct'?' <span class="sh">'+(x[1]/total*100).toFixed(0)+'%</span>':'')+'</span>';
   }).join('')+'</div>';
 }
 
@@ -672,10 +678,9 @@ function tile(s){
     if(!s.snapshot){
       h='<div class="tile-head"><span class="tile-title">'+esc(s.title)+'</span></div><p class="empty">Not available yet. The source could not be read on the last run; click for details.</p>';
     }else{
-      var sn=s.snapshot,chip=sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'';
-      chip+=memoChip(s);
+      var sn=s.snapshot,hd=headlineOf(s),chip=hd.chip+ratioChip(s)+memoChip(s);
       h='<div class="tile-head"><span class="tile-title">'+esc(s.title)+'</span><span class="tile-period">'+esc(sn.period)+'</span></div>'+
-        '<div class="tile-value"><span class="num">'+vfmtOf(s)(sn.total)+'</span><span class="chips">'+chip+'</span></div>'+
+        '<div class="tile-value"><span class="num">'+hd.num+'</span><span class="chips">'+chip+'</span></div>'+
         '<div class="comp-body">'+barsHTML(s,false)+'<div class="mini">'+(s.hist&&s.hist.x&&s.hist.x.length>1?miniStackedSVG(s):'')+'</div></div>'+
         '<div class="tile-foot"><span>'+esc(s.src_label)+'</span>'+foot+'</div>';
     }
@@ -843,8 +848,9 @@ function openModal(s,btn){
   q('#m-num').textContent='';q('#m-period').textContent='';q('#m-chips').innerHTML='';
   if(comp&&has){
     var sn=s.snapshot;
-    q('#m-num').textContent=vfmtOf(s)(sn.total);q('#m-period').textContent=sn.period;
-    q('#m-chips').innerHTML=(sn.prev_total?'<span class="chip"><b>'+sgn((sn.total/sn.prev_total-1)*100,'%',1)+'</b> '+esc(sn.prev_label||'vs year ago')+'</span>':'')+memoChip(s);
+    var hd=headlineOf(s);
+    q('#m-num').textContent=hd.num;q('#m-period').textContent=sn.period;
+    q('#m-chips').innerHTML=hd.chip+ratioChip(s)+memoChip(s);
     q('#m-comp').innerHTML='<div class="sect"><h3>'+esc(sn.period)+'</h3></div>'+barsHTML(s,true)+
       (s.hist&&s.hist.x&&s.hist.x.length?'<div class="sect"><h3>'+esc(s.hist.title||'History')+'</h3><div class="seg" id="m-mode" role="group" aria-label="Units">'+modes.map(function(m){return '<button type="button" data-m="'+m+'" aria-pressed="'+(m===state.mode)+'">'+esc(modeLabel(s,m))+'</button>';}).join('')+'</div></div>'+
       '<div class="chart" id="m-stacked"></div>'+

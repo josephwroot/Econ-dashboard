@@ -431,6 +431,33 @@ comp:
       - {name: Depreciation, series: [COFC]}
       - {name: Everything else, residual: true}
 
+  - id: age_structure
+    group: labor
+    order: 55
+    title: Dependents and workers
+    sub: Population by age group, share of the total
+    source:
+      type: fred_comp
+      freq: A
+      titles:
+        SPPOP0014TOZSUSA: "Population Ages 0 to 14 for the United States"
+        SPPOP65UPTOZSUSA: "Population ages 65 and above for the United States"
+        SPPOP1564TOZSUSA: "Population Ages 15 to 64 for the United States"
+    headline: {name: Under 15 or 65 and over, cats: [Under 15, 65 and over], delta: pt}
+    vfmt: pct
+    modes: [share]
+    mode_labels: {share: Share of population}
+    src_label: World Bank via FRED
+    sid_override: SPPOP0014TOZSUSA, SPPOP1564TOZSUSA, SPPOP65UPTOZSUSA
+    url: https://fred.stlouisfed.org/series/SPPOP65UPTOZSUSA
+    freq_label: Annual, since 1960; updated each summer
+    next_text: Each summer, when the World Bank updates its indicators
+    note: The conventional dependency split, under 15 and 65 and over against the working ages 15 to 64, from the World Bank's population indicators, which follow the Census Bureau's estimates. The total dependent share was higher in the 1960s than today, but then it was children; the old-age share has doubled since 1960 and is still rising as the baby boom passes 65.
+    cats:
+      - {name: Under 15, series: [SPPOP0014TOZSUSA]}
+      - {name: 65 and over, series: [SPPOP65UPTOZSUSA]}
+      - {name: 15 to 64, series: [SPPOP1564TOZSUSA]}
+
   - id: payrolls_sector
     group: labor
     title: Payroll employment by sector
