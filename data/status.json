@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-16T17:24:02+00:00",
+ "generated_at": "2026-11-16T17:46:33+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -37,9 +37,12 @@
   "wealth_assets",
   "wealth_dist",
   "maturity",
+  "industries",
   "taxshares"
  ],
  "stale": {},
- "failed": {},
+ "failed": {
+  "occupations": "RuntimeError: OEWS national zip not found; tried 403 oesm25nat.zip (1325 bytes), 403 oesm24nat.zip (1325 bytes), 403 oesm23nat.zip (1325 bytes), 403 oesm22nat.zip (1325 bytes)"
+ },
  "notes": []
 }
