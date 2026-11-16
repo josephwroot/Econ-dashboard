@@ -754,7 +754,7 @@ GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
-GSS_METHOD = 'wtssps-first/13cats/labels2'  # bump to force a re-read after a change in how the shares are computed
+GSS_METHOD = 'wtssps-first/13cats/labels3'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -896,14 +896,14 @@ def build_gss_religion(session, today, prev=None):
     lds = ot.isin(lds_codes) if lds_codes else pd.Series(False, index=df.index)
     fam = dn.map(denom_fam)
     conds = [
+        lds & r.isin([1, 5, 11, 13]),   # Latter-day Saints answer Protestant, other, or Christian; the write-in settles it
         r == 4, r == 2, r == 3, r == 9, r.isin([5, 6, 7, 8, 12]), r == 10,
-        lds & r.isin([1, 11, 13]),
         r.isin([11, 13]),
         (r == 1) & fam.notna(), r == 1,
     ]
     choices = [
-        'No religion', 'Catholic', 'Jewish', 'Muslim', 'Other religion', 'Other Christian',
         'Other Christian',
+        'No religion', 'Catholic', 'Jewish', 'Muslim', 'Other religion', 'Other Christian',
         'Nondenominational',
         fam.fillna(''), 'Other Protestant',
     ]
