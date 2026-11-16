@@ -736,16 +736,25 @@ def build_occupations(bls_fn, today, prev=None):
 # religious identity. The cumulative Stata file is large (hundreds of megabytes unpacked), so it
 # is downloaded at most every few months and the shares are cached in the data file between runs.
 GSS_URL = 'https://gss.norc.org/content/dam/gss/get-the-data/documents/stata/GSS_stata.zip'
-GSS_RELIG = [  # RELIG codes in the cumulative file; nondenominational Christians (11, 13) counted with Protestants
-    ('Protestant', {1, 11, 13}), ('Catholic', {2}), ('Jewish', {3}),
-    ('Other religion', {5, 6, 7, 8, 9, 10, 12}), ('No religion', {4}),
+# RELIG codes: 1 Protestant, 2 Catholic, 3 Jewish, 4 none, 5 other, and from 1998 on 6 Buddhism, 7 Hinduism,
+# 8 other eastern, 9 Islam, 10 Orthodox Christian, 11 Christian, 12 Native American, 13 inter-/nondenominational.
+# DENOM codes (Protestants only): 10-19 Baptist, 20-29 Methodist, 30-39 Lutheran, 40-49 Presbyterian,
+# 50 Episcopal, 60 other, 70 no denomination. Latter-day Saints are found through the OTHER variable's labels.
+GSS_CATS = [  # stacking order, bottom to top
+    'Baptist', 'Methodist', 'Lutheran', 'Presbyterian', 'Episcopal', 'Other Protestant', 'Nondenominational',
+    'Catholic', 'Other Christian', 'Jewish', 'Muslim', 'Other religion', 'No religion',
 ]
+GSS_SMALL = [  # the religions the GSS has coded separately since 1998, as shares of all adults
+    ('Muslim', {9}), ('Buddhist', {6}), ('Hindu', {7}), ('Orthodox Christian', {10}),
+    ('Other eastern religions', {8}), ('Native American', {12}), ('Other', {5}),
+]
+GSS_SMALL_FROM = 1998
 GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('Weekly or more', {7, 8}), ('Monthly to nearly weekly', {4, 5, 6}),
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
-GSS_METHOD = 'wtssps-first'  # bump to force a re-read after a change in how the shares are computed
+GSS_METHOD = 'wtssps-first/13cats'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -793,6 +802,27 @@ def build_gss_religion(session, today, prev=None):
     with pd.io.stata.StataReader(dpath, convert_categoricals=False) as rdr:
         names = {v.lower(): v for v in rdr.variable_labels()}
         need = {'year': names.get('year'), 'relig': names.get('relig'), 'attend': names.get('attend')}
+        opt = {'denom': names.get('denom'), 'other': names.get('other')}
+        # value labels of OTHER, to find the Latter-day Saints codes without hard-coding them
+        lds_codes = set()
+        lds_note = ''
+        try:
+            vls = rdr.value_labels()
+            lab = None
+            for key in (opt['other'], 'other', 'OTHER'):
+                if key in vls:
+                    lab = vls[key]
+                    break
+            if lab is None:
+                lbl = getattr(rdr, '_lbllist', None) or getattr(rdr, 'lbllist', None)
+                vl = getattr(rdr, '_varlist', None) or getattr(rdr, 'varlist', None)
+                if lbl and vl and opt['other'] in vl:
+                    lab = vls.get(lbl[list(vl).index(opt['other'])])
+            if lab:
+                lds_codes = {int(k) for k, v in lab.items() if re.search(r'latter.?day|mormon|\blds\b', str(v), re.I)}
+        except Exception as e:  # noqa: BLE001
+            lds_codes = set()
+            lds_note = f'{type(e).__name__}: {e}'
         # weights, coalesced row by row: the post-stratification weight WTSSPS, which NORC computes
         # the same way for every year including the web-era waves, then the nonresponse-adjusted
         # WTSSNRPS (2004 on), then the original WTSSALL
@@ -800,9 +830,13 @@ def build_gss_religion(session, today, prev=None):
         missing = [k for k, v in need.items() if not v]
         if missing:
             raise RuntimeError(f'GSS file lacks {missing}; has {len(names)} variables')
-        cols = [need['year'], need['relig'], need['attend']] + wcols
+        optcols = [v for v in (opt['denom'], opt['other']) if v]
+        cols = [need['year'], need['relig'], need['attend']] + optcols + wcols
         df = rdr.read(columns=cols)
-    df.columns = ['year', 'relig', 'attend'] + [f'w{i}' for i in range(len(wcols))]
+    df.columns = ['year', 'relig', 'attend'] + [k for k in ('denom', 'other') if opt[k]] + [f'w{i}' for i in range(len(wcols))]
+    for k in ('denom', 'other'):
+        if k not in df:
+            df[k] = -1.0
     try:
         os.remove(dpath)
     except OSError:
@@ -820,8 +854,28 @@ def build_gss_religion(session, today, prev=None):
     for y in unweighted:
         df.loc[df['year'] == y, 'w'] = 1.0
 
-    def shares(col, groups):
-        valid = df[df[col] >= 0]
+    # one category per respondent
+    import numpy as np
+    r, dn, ot = df['relig'], df['denom'], df['other']
+    lds = ot.isin(lds_codes) if lds_codes else pd.Series(False, index=df.index)
+    conds = [
+        r == 4, r == 2, r == 3, r == 9, r.isin([5, 6, 7, 8, 12]), r == 10,
+        lds & r.isin([1, 11, 13]),
+        r.isin([11, 13]),
+        (r == 1) & (dn >= 10) & (dn < 20), (r == 1) & (dn >= 20) & (dn < 30), (r == 1) & (dn >= 30) & (dn < 40),
+        (r == 1) & (dn >= 40) & (dn < 50), (r == 1) & (dn >= 50) & (dn < 60), (r == 1) & (dn == 70), r == 1,
+    ]
+    choices = [
+        'No religion', 'Catholic', 'Jewish', 'Muslim', 'Other religion', 'Other Christian',
+        'Other Christian',
+        'Nondenominational',
+        'Baptist', 'Methodist', 'Lutheran',
+        'Presbyterian', 'Episcopal', 'Nondenominational', 'Other Protestant',
+    ]
+    df['cat'] = np.select(conds, choices, default='')
+
+    def shares(col, groups, valid_mask=None):
+        valid = df[valid_mask] if valid_mask is not None else df[df[col] >= 0]
         out = {name: [] for name, _ in groups}
         ns = []
         for y in years:
@@ -831,8 +885,11 @@ def build_gss_religion(session, today, prev=None):
             for name, codes in groups:
                 out[name].append(round(float(d.loc[d[col].isin(codes), 'w'].sum()) / float(tot) * 100, 2) if tot else None)
         return out, ns
-    rel, n_rel = shares('relig', GSS_RELIG)
+    GSS_RELIG = [(name, {name}) for name in GSS_CATS]
+    rel, n_rel = shares('cat', GSS_RELIG, df['cat'] != '')
     att, n_att = shares('attend', GSS_ATTEND)
+    small, n_small = shares('relig', GSS_SMALL)
+    small_idx = [i for i, y in enumerate(years) if y >= GSS_SMALL_FROM]
     # the attendance item was not asked in every year; drop years with too few answers
     att_years = [y for y, n in zip(years, n_att) if n >= 300]
     att_idx = [years.index(y) for y in att_years]
@@ -847,13 +904,18 @@ def build_gss_religion(session, today, prev=None):
                 'headline': {'name': 'No religion', 'value': none_now, 'prev': none_then, 'delta': 'pt'}}
     hist = {'x': [float(y) for y in years], 'labels': [str(y) for y in years],
             'cats': [[name, rel[name]] for name, _ in GSS_RELIG], 'gdp': None, 'title': f'Since {years[0]}'}
-    extras = [{'title': 'How often people attend religious services', 'cats': [{'name': name} for name, _ in GSS_ATTEND],
+    extras = [{'title': f'Religions coded separately since {GSS_SMALL_FROM}', 'cats': [{'name': name} for name, _ in GSS_SMALL],
+               'hist': {'x': [float(years[i]) for i in small_idx], 'labels': [str(years[i]) for i in small_idx],
+                        'cats': [[name, [small[name][i] for i in small_idx]] for name, _ in GSS_SMALL], 'gdp': None},
+               'modes': ['level'], 'vfmt': 'pct', 'mode_labels': {'level': 'Share of all adults'},
+               'note': f'Before {GSS_SMALL_FROM} the survey recorded all of these as "other"; since then each is coded on its own. Each is a small share of adults, so the sampling error on any one year is a few tenths of a point. "Other" is the residual write-ins.'},
+              {'title': 'How often people attend religious services', 'cats': [{'name': name} for name, _ in GSS_ATTEND],
                'hist': {'x': [float(y) for y in att_years], 'labels': [str(y) for y in att_years],
                         'cats': [[name, [att[name][i] for i in att_idx]] for name, _ in GSS_ATTEND], 'gdp': None},
                'modes': ['share'], 'vfmt': 'pct', 'mode_labels': {'share': 'Share of adults'},
                'note': 'Answers to "How often do you attend religious services?", grouped. Self-reported attendance runs well above counts taken at the door.'}]
     return {'snapshot': snapshot, 'hist': hist, 'extras': extras, 'n_latest': n_rel[li],
-            'weights': wcols, 'unweighted_years': unweighted, 'method': GSS_METHOD,
+            'weights': wcols, 'unweighted_years': unweighted, 'method': GSS_METHOD, 'lds_codes': sorted(lds_codes), 'lds_note': lds_note,
             'release': release, 'source_url': GSS_URL, 'fetched_on': today.isoformat(),
             'last_updated': today.isoformat() + ' 00:00:00-05',
             'updated_text': f'{today.strftime("%b %-d, %Y")} (GSS {release}, latest wave {latest})',

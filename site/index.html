@@ -355,7 +355,7 @@ function sparkSVG(s){
 }
 
 /* composition helpers */
-function catColor(c,k,cats){return cats[k].residual?'var(--crest)':CAT[k%CAT.length];}
+function catColor(c,k,cats){return cats[k].color||(cats[k].residual?'var(--crest)':CAT[k%CAT.length]);}
 function stackData(c,mode){
   var yrs=c.hist.x,nn=yrs.length,K=c.hist.cats.length;
   var vals=c.hist.cats.map(function(cc){return cc[1].slice();});
@@ -1003,7 +1003,7 @@ function draw(){
   if(current.kind==='curves'){if(q('#m-curves'))renderCurves(q('#m-curves'),current.tc);}
   else if(current.kind==='maturity'){drawMaturity(current.m);}
   else if(current.kind==='taxshares'){drawTaxshares(current.t);}
-  else if(current.kind==='comp'){if(current.hist&&q('#m-stacked'))renderStacked(q('#m-stacked'),current,state.mode);(current.extras||[]).forEach(function(x,i){var el=q('#m-stacked-x'+i);if(el&&x.hist&&x.hist.x.length>1)renderStacked(el,x,'share');});}
+  else if(current.kind==='comp'){if(current.hist&&q('#m-stacked'))renderStacked(q('#m-stacked'),current,state.mode);(current.extras||[]).forEach(function(x,i){var el=q('#m-stacked-x'+i);if(el&&x.hist&&x.hist.x.length>1)renderStacked(el,x,(x.modes||['share'])[0]);});}
   else if(current.obs&&current.obs.length)renderChart(q('#m-chart'),current,state);
 }
 function setRange(r){state.range=r;q('#m-range').querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.r===String(r)));});draw();}
