@@ -10,6 +10,7 @@ dump of the first rows, so the next run can be fixed from the log alone.
 """
 import datetime as dt
 import io
+import os
 import re
 
 MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -728,3 +729,118 @@ def build_occupations(bls_fn, today, prev=None):
             'total_emp': T, 'median_all': val(OEWS_TOTAL, '13', year), 'mean_all': val(OEWS_TOTAL, '04', year),
             'n_detailed': None, 'n_candidates': len(detailed), 'top': top, 'groups': groups,
             'last_updated': None, 'fetched': True}
+
+
+# ---------------------------------------------------------------- GSS: religious affiliation and attendance
+# The General Social Survey (NORC, since 1972) is the standard source for long-run trends in
+# religious identity. The cumulative Stata file is large (hundreds of megabytes unpacked), so it
+# is downloaded at most every few months and the shares are cached in the data file between runs.
+GSS_URL = 'https://gss.norc.org/content/dam/gss/get-the-data/documents/stata/GSS_stata.zip'
+GSS_RELIG = [  # RELIG codes in the cumulative file; nondenominational Christians (11, 13) counted with Protestants
+    ('Protestant', {1, 11, 13}), ('Catholic', {2}), ('Jewish', {3}),
+    ('Other religion', {5, 6, 7, 8, 9, 10, 12}), ('No religion', {4}),
+]
+GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
+    ('Weekly or more', {7, 8}), ('Monthly to nearly weekly', {4, 5, 6}),
+    ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
+]
+GSS_REFRESH_DAYS = 120
+
+
+def build_gss_religion(session, today, prev=None):
+    """Weighted shares of adults by religious preference and by attendance, every GSS year."""
+    import tempfile
+    import zipfile
+    prev = prev or {}
+    if prev.get('snapshot') and prev.get('hist') and prev.get('fetched_on'):
+        try:
+            age = (today - dt.date.fromisoformat(prev['fetched_on'])).days
+        except ValueError:
+            age = 10 ** 6
+        if age < GSS_REFRESH_DAYS:
+            out = {k: prev[k] for k in ('snapshot', 'hist', 'extras', 'fetched_on', 'release', 'last_updated', 'updated_text', 'next', 'source_url', 'n_latest') if k in prev}
+            out['fetched'] = False
+            return out
+    import pandas as pd  # imported here so the rest of the build does not need it
+
+    tmp = tempfile.mkdtemp(prefix='gss')
+    zpath = os.path.join(tmp, 'gss.zip')
+    with session.get(GSS_URL, stream=True, timeout=900, headers={'Accept': '*/*'}) as r:
+        if r.status_code != 200:
+            raise RuntimeError(f'GSS download HTTP {r.status_code}')
+        with open(zpath, 'wb') as f:
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
+    size = os.path.getsize(zpath)
+    with open(zpath, 'rb') as f:
+        if f.read(2) != b'PK':
+            raise RuntimeError(f'GSS download is not a zip ({size} bytes)')
+    with zipfile.ZipFile(zpath) as z:
+        dtas = sorted((m for m in z.infolist() if m.filename.lower().endswith('.dta')), key=lambda m: -m.file_size)
+        if not dtas:
+            raise RuntimeError('GSS zip holds no .dta file: ' + ', '.join(m.filename for m in z.infolist()[:10]))
+        member = dtas[0]
+        dpath = z.extract(member, tmp)
+    os.remove(zpath)
+    release = os.path.basename(member.filename)
+    mrel = re.match(r'gss(\d\d)(\d\d)_?r?(\w*)', release.lower())
+    if mrel:
+        release = f'19{mrel.group(1)}\u201320{mrel.group(2)}' + (f', release {mrel.group(3)}' if mrel.group(3) else '')
+    with pd.io.stata.StataReader(dpath, convert_categoricals=False) as rdr:
+        names = {v.lower(): v for v in rdr.variable_labels()}
+        need = {'year': names.get('year'), 'relig': names.get('relig'), 'attend': names.get('attend')}
+        wcol = next((names[w] for w in ('wtsscomp', 'wtssall', 'wtss') if w in names), None)
+        missing = [k for k, v in need.items() if not v]
+        if missing:
+            raise RuntimeError(f'GSS file lacks {missing}; has {len(names)} variables')
+        cols = [need['year'], need['relig'], need['attend']] + ([wcol] if wcol else [])
+        df = rdr.read(columns=cols)
+    df.columns = ['year', 'relig', 'attend'] + (['w'] if wcol else [])
+    if 'w' not in df:
+        df['w'] = 1.0
+    try:
+        os.remove(dpath)
+    except OSError:
+        pass
+    df = df.apply(pd.to_numeric, errors='coerce')
+    df = df[df['year'] > 1900]
+    df['w'] = df['w'].where(df['w'] > 0, 0.0)
+    years = sorted(int(y) for y in df['year'].dropna().unique())
+
+    def shares(col, groups):
+        valid = df[df[col] >= 0]
+        out = {name: [] for name, _ in groups}
+        ns = []
+        for y in years:
+            d = valid[valid['year'] == y]
+            tot = d['w'].sum()
+            ns.append(int(len(d)))
+            for name, codes in groups:
+                out[name].append(round(float(d.loc[d[col].isin(codes), 'w'].sum()) / float(tot) * 100, 2) if tot else None)
+        return out, ns
+    rel, n_rel = shares('relig', GSS_RELIG)
+    att, n_att = shares('attend', GSS_ATTEND)
+    # the attendance item was not asked in every year; drop years with too few answers
+    att_years = [y for y, n in zip(years, n_att) if n >= 300]
+    att_idx = [years.index(y) for y in att_years]
+    latest = years[-1]
+    li = len(years) - 1
+    # comparison about a decade earlier (the survey is biennial)
+    pi = max(i for i, y in enumerate(years) if y <= latest - 10)
+    none_now = rel['No religion'][li]
+    none_then = rel['No religion'][pi]
+    snapshot = {'period': str(latest), 'total': 100.0, 'prev_total': None, 'prev_label': f'vs {years[pi]}',
+                'cats': [[name, rel[name][li]] for name, _ in GSS_RELIG], 'as_of': f'{latest}-01-01', 'memo': None,
+                'headline': {'name': 'No religion', 'value': none_now, 'prev': none_then, 'delta': 'pt'}}
+    hist = {'x': [float(y) for y in years], 'labels': [str(y) for y in years],
+            'cats': [[name, rel[name]] for name, _ in GSS_RELIG], 'gdp': None, 'title': f'Since {years[0]}'}
+    extras = [{'title': 'How often people attend religious services', 'cats': [{'name': name} for name, _ in GSS_ATTEND],
+               'hist': {'x': [float(y) for y in att_years], 'labels': [str(y) for y in att_years],
+                        'cats': [[name, [att[name][i] for i in att_idx]] for name, _ in GSS_ATTEND], 'gdp': None},
+               'modes': ['share'], 'vfmt': 'pct', 'mode_labels': {'share': 'Share of adults'},
+               'note': 'Answers to "How often do you attend religious services?", grouped. Self-reported attendance runs well above counts taken at the door.'}]
+    return {'snapshot': snapshot, 'hist': hist, 'extras': extras, 'n_latest': n_rel[li],
+            'release': release, 'source_url': GSS_URL, 'fetched_on': today.isoformat(),
+            'last_updated': today.isoformat() + ' 00:00:00-05',
+            'updated_text': f'{today.strftime("%b %-d, %Y")} (GSS {release}, latest wave {latest})',
+            'next': f'The {latest + 2} survey, expected in {latest + 3}', 'fetched': True}

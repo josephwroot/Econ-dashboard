@@ -17,7 +17,7 @@ groups:
   - {id: fiscal,      title: Fiscal,             desc: "Debt, deficits, and where the money goes"}
   - {id: debt,        title: "The debt in detail", desc: "Who holds it, and when it comes due"}
   - {id: household,   title: Household,          desc: "Income and wealth"}
-  - {id: immigration, title: Immigration,        desc: "Flows and the foreign-born workforce"}
+  - {id: immigration, title: Population,         desc: "Immigration, and how Americans identify"}
 
 series:
   - id: gdp_growth
@@ -432,6 +432,7 @@ comp:
         SPPOP65UPTOZSUSA: "Population ages 65 and above for the United States"
         SPPOP1564TOZSUSA: "Population Ages 15 to 64 for the United States"
     headline: {name: Under 15 or 65 and over, cats: [Under 15, 65 and over], delta: pt}
+    ratio_label: dependents per working-age person
     vfmt: pct
     modes: [share]
     mode_labels: {share: Share of population}
@@ -625,6 +626,28 @@ comp:
       - {name: Bottom 50%, series: [WFRBLB50107]}
 
 # Releases always shown in the weekly strip when FRED lists them, beyond those tied to the series above.
+  - id: religion
+    group: immigration
+    order: 60
+    title: Religious affiliation
+    sub: Share of adults by religious preference, from the General Social Survey
+    freq: A
+    source:
+      type: gss
+    cats:
+      - {name: Protestant}
+      - {name: Catholic}
+      - {name: Jewish}
+      - {name: Other religion}
+      - {name: No religion}
+    vfmt: pct
+    modes: [share]
+    mode_labels: {share: Share of adults}
+    src_label: General Social Survey (NORC)
+    url: https://gss.norc.org/get-the-data/stata
+    freq_label: Yearly from 1972, every two years since 1994; adults 18 and over, weighted with the survey's composite weight
+    note: Answers to "What is your religious preference?" Protestant includes nondenominational and "just Christian" answers; other religion covers Muslims, Buddhists, Hindus, Orthodox Christians and the rest, each under 2 percent of adults. The GSS switched from in-person interviews to mostly web questionnaires in 2021, and NORC cautions that part of that year's jump in "no religion" reflects the change in mode; later waves mix the two. The 1972 to 1974 surveys sampled households rather than adults, which the weights correct only in part.
+
 extra_releases:
   - Job Openings and Labor Turnover Survey
   - Advance Monthly Sales for Retail and Food Services

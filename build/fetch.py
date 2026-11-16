@@ -1000,9 +1000,12 @@ def main():
             elif stype == 'tic_mfh':
                 entry.update(extras.build_foreign_holders(S))
                 entry['cats'] = [{'name': n, 'residual': n == 'All other'} for n, _ in entry['snapshot']['cats']]
+            elif stype == 'gss':
+                entry.update(extras.build_gss_religion(S, TODAY_ET, prev_comp.get(cid)))
+                entry['cats'] = [{'name': n} for n, _ in entry['snapshot']['cats']]
             else:
                 entry.update(build_comp(cfg, gdp_fy))
-            entry['updated'] = fmt_date(entry['last_updated'])
+            entry['updated'] = entry.get('updated_text') or fmt_date(entry['last_updated'])
             entry['stale'] = False
             entry['error'] = None
             status['ok'].append(cid)
@@ -1019,7 +1022,7 @@ def main():
             traceback.print_exc()
             old = prev_comp.get(cid)
             if old and old.get('snapshot'):
-                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name') if k in old})
+                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name', 'cats', 'extras', 'fetched_on', 'release', 'updated_text', 'next', 'source_url', 'n_latest') if k in old})
                 entry['stale'] = True
                 entry['error'] = err
                 entry['stale_since'] = old.get('stale_since') or fmt_date(TODAY_ET.isoformat())
@@ -1081,6 +1084,8 @@ def main():
             c['next'] = c.get('next') or c.get('next_text') or ''
         elif c.get('source', {}).get('type') in ('tic_mfh', 'tic_fred'):
             c['next'] = c.get('next') or 'Around the 15th of each month, for the month six weeks earlier'
+        elif c.get('source', {}).get('type') == 'gss':
+            c['next'] = c.get('next') or ''
         else:
             c['next'] = 'Around the 8th business day of each month'
 
