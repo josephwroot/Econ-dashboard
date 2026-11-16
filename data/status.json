@@ -1,15 +1,13 @@
 {
- "generated_at": "2026-11-16T16:57:25+00:00",
+ "generated_at": "2026-11-16T17:18:52+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
   "productivity",
   "labor_share",
   "unrate",
-  "lfpr",
   "prime_epop",
   "payrolls",
-  "lfpr_sex",
   "cpi",
   "core_pce",
   "fedfunds",
@@ -40,7 +38,9 @@
   "maturity",
   "taxshares"
  ],
- "stale": {},
+ "stale": {
+  "lfpr_sex": "RuntimeError: FRED LNS11300061 not found and no series titled \"Labor Force Participation Rate - 25-54 Yrs., Men\""
+ },
  "failed": {},
  "notes": []
 }
