@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-16T17:58:18+00:00",
+ "generated_at": "2026-11-16T18:34:13+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -36,12 +36,15 @@
   "foreign_holders",
   "wealth_assets",
   "wealth_dist",
+  "religion",
   "maturity",
   "industries",
   "occupations",
   "taxshares"
  ],
  "stale": {},
- "failed": {},
+ "failed": {
+  "religion": "TypeError: type NoneType doesn't define __round__ method"
+ },
  "notes": []
 }
