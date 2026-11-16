@@ -143,3 +143,13 @@ def payroll_tax(y, law):
     if p.get('addl') and p.get('addl_over') and y > p['addl_over']:
         t += p['addl'] / 100 * (y - p['addl_over'])
     return t
+
+
+def employer_payroll_tax(y, law):
+    """The employer's matching share: the same OASDI and Medicare rates and wage bases
+    as the employee pays, without the Additional Medicare Tax (employee-only since 2013).
+    The federal unemployment tax (net 0.6% of the first $7,000) is left out."""
+    p = law['payroll']
+    t = p['oasdi'] / 100 * min(y, p['oasdi_base'])
+    t += p['hi'] / 100 * (min(y, p['hi_base']) if p['hi_base'] else y)
+    return t

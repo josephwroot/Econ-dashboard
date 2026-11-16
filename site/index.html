@@ -100,6 +100,38 @@ h1{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.15;marg
 .bars.big{font-size:15px;gap:10px 14px;grid-template-columns:minmax(0,14em) 1fr auto;margin-top:8px}
 .bars.big .bt{height:14px}
 .bars .sh{color:var(--muted)}
+.bars .bl.ind{padding-left:14px}
+.dbars{display:grid;grid-template-columns:minmax(0,11em) 1fr auto;gap:5px 10px;align-items:center;font-size:13px}
+.dbars .bl{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbars .dt{position:relative;height:9px;background:var(--band);border-radius:2px}
+.dbars .dt::before{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
+.dbars .df{position:absolute;top:0;height:100%;background:var(--c1);border-radius:2px}
+.dbars .df.neg{background:var(--c4)}
+.dbars .bv{text-align:right;white-space:nowrap}
+.modal .dbars{font-size:14px;gap:7px 12px;grid-template-columns:minmax(0,18em) 1fr auto;margin-top:6px}
+.modal .dbars .dt{height:12px}
+.itable tr.sub td:first-child{padding-left:26px;color:var(--muted)}
+.itable tr.sec td{font-weight:500}
+.itable tr.sec td:first-child{font-weight:500}
+.itable tr.outside td:first-child{font-style:italic}
+.itable td.sp{padding:1px 8px;line-height:0}
+.spark{display:inline-block;vertical-align:middle}
+.otable .code{color:var(--faint);font-size:11.5px;margin-left:4px}
+.hint{font-size:12.5px;color:var(--faint);max-width:38em}
+.list-body{margin-top:auto}
+.bars4{display:grid;grid-template-columns:minmax(0,16em) 1fr auto auto;gap:4px 10px;align-items:center;font-size:13px}
+.bars4 .bh{font-size:11.5px;color:var(--faint);text-align:right}
+.bars4 .bl{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bars4 .bt{height:9px;background:var(--band);border-radius:2px;overflow:hidden}
+.bars4 .bf{display:block;height:100%;border-radius:2px}
+.bars4 .bv{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bars4 .b2{color:var(--muted);min-width:3.2em}
+.bars4 .b2.neg{color:var(--warn)}
+.bars.big.wl{grid-template-columns:minmax(0,24em) 1fr auto}
+.occ-curve{max-width:640px;margin-top:6px}
+.otable th:nth-child(2),.otable td:nth-child(2){text-align:left}
+.otable .code{white-space:nowrap}
+@media (max-width:520px){.bars4{grid-template-columns:minmax(0,9em) 1fr auto auto}.bars.big.wl{grid-template-columns:minmax(0,12em) 1fr auto}}
 .mini svg{display:block;width:100%;height:auto}
 .curves-wrap{margin-top:auto}
 .curves-wrap svg{display:block;width:100%;height:auto}
@@ -383,7 +415,7 @@ function curvesSVG(tc,opt){
   INC_TICKS.forEach(function(v,i){var lx=Math.log10(v);if(lx<x0-1e-9||lx>x1+1e-9)return;if(opt.sparse&&i%2)return;g+='<text '+tk+' x="'+X(lx).toFixed(1)+'" y="'+(H-mB+15)+'" text-anchor="middle">'+incLabel(v)+'</text>';});
   var cur=null;
   tc.curves.forEach(function(c){
-    var d=c[key].map(function(v,i){return (i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(v).toFixed(1);}).join('');
+    var d=(c[key]||c.share).map(function(v,i){return (i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(v).toFixed(1);}).join('');
     if(c.current)cur='<path class="cur" d="'+d+'"/>';else g+='<path class="old" data-year="'+c.year+'" d="'+d+'"/>';
   });
   g+=cur||'';
@@ -418,7 +450,7 @@ function renderCurves(el,tc){
     var i=0;for(var k=1;k<r.xs.length;k++)if(Math.abs(r.xs[k]-lx)<Math.abs(r.xs[i]-lx))i=k;
     var px=r.X(r.xs[i]);xh.style.display='';xh.setAttribute('x1',px);xh.setAttribute('x2',px);
     var rows='<b>$'+withCommas(tc.incomes[i])+' of wages, '+tc.base_year+' dollars</b>';
-    tc.curves.slice().reverse().forEach(function(c){rows+='<div>'+(c.current?'<b>':'')+esc(c.label)+(c.current?' (current)</b>':'')+' <b>'+c[curvesState.key][i].toFixed(0)+'%</b></div>';});
+    tc.curves.slice().reverse().forEach(function(c){var arr=c[curvesState.key]||c.share;rows+='<div>'+(c.current?'<b>':'')+esc(c.label)+(c.current?' (current)</b>':'')+' <b>'+arr[i].toFixed(0)+'%</b></div>';});
     tt.innerHTML=rows;tt.style.display='block';
     var left=px/w*rb.width+12;if(left+tt.offsetWidth>rb.width)left=px/w*rb.width-12-tt.offsetWidth;tt.style.left=Math.max(0,left)+'px';
   }
@@ -431,14 +463,17 @@ function openCurvesModal(tc,btn){
   q('#m-sub').textContent='Single filer with wage income and the standard deduction, no credits; earlier decades restated in '+tc.base_year+' dollars with the CPI';
   q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
   q('#m-num').textContent='';q('#m-period').textContent='';q('#m-chips').innerHTML='';
-  q('#m-comp').innerHTML='<div class="sect"><h3>By income level</h3><div class="seg" id="m-taxkey" role="group" aria-label="Taxes included"><button type="button" data-k="share" aria-pressed="true">Income and payroll taxes</button><button type="button" data-k="share_income_tax_only" aria-pressed="false">Income tax only</button></div></div>'+
+  q('#m-comp').innerHTML='<div class="sect"><h3>By income level</h3><div class="seg" id="m-taxkey" role="group" aria-label="Taxes included"><button type="button" data-k="share" aria-pressed="true">Income and payroll taxes</button><button type="button" data-k="share_income_tax_only" aria-pressed="false">Income tax only</button><button type="button" data-k="share_total_cost" aria-pressed="false">Of total employer cost</button></div></div><p class="note" id="m-taxnote" style="margin:0 0 6px"></p>'+
     '<div class="chart" id="m-curves"></div>'+
     '<div class="legend" id="m-curveleg">'+tc.curves.map(function(c){return '<button type="button" class="leg-btn'+(c.current?' cur':'')+'" data-year="'+c.year+'" aria-pressed="false"><i></i>'+esc(c.label)+(c.current?' ('+c.year+', current)':' ('+c.year+')')+'</button>';}).join('')+'</div>';
-  q('#m-taxkey').querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){curvesState.key=b.dataset.k;q('#m-taxkey').querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});renderCurves(q('#m-curves'),tc);});});
+  var TAXNOTES={share:'Take-home pay as a share of wages, after federal income tax and the employee half of Social Security and Medicare taxes.',share_income_tax_only:'Wages after federal income tax only, as a share of wages.',share_total_cost:'Take-home pay as a share of what the job costs the employer: wages plus the employer\u2019s matching Social Security and Medicare taxes. This is the full federal wedge between what a job costs and what the worker keeps (the federal unemployment tax, about $42 a year, is left out).'};
+  function taxnote(){q('#m-taxnote').textContent=TAXNOTES[curvesState.key]||'';}
+  q('#m-taxkey').querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){curvesState.key=b.dataset.k;q('#m-taxkey').querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});taxnote();renderCurves(q('#m-curves'),tc);});});
+  taxnote();
   q('#m-curveleg').querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){var y=+b.dataset.year;curvesState.hi=curvesState.hi===y?null:y;q('#m-curveleg').querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(+x.dataset.year===curvesState.hi));});renderCurves(q('#m-curves'),tc);});});
   var laws=tc.curves.map(function(c){return c.label+': '+c.law;}).join('. ');
   q('#m-meta').innerHTML='<dt>Source</dt><dd>Statutory rate schedules from the <a href="https://taxfoundation.org/data/all/federal/historical-income-tax-rates-brackets/" target="_blank" rel="noopener">Tax Foundation historical table</a>; standard deductions and exemptions from IRS Statistics of Income; payroll rates and wage bases from the Social Security Administration; parameters listed in <a href="https://github.com/josephwroot/econ-dashboard/blob/main/build/taxlaw.py" target="_blank" rel="noopener">build/taxlaw.py</a></dd><dt>Years shown</dt><dd>'+esc(laws)+'</dd><dt>Prices</dd><dd>Each year\u2019s brackets are applied to nominal income equal to the '+tc.base_year+'-dollar amount times that year\u2019s CPI relative to the latest twelve-month average</dd>';
-  q('#m-note').textContent='Simplifications: no earned income credit (small for a single filer without children), no phase-out of the personal exemption, no alternative minimum tax, no state or local taxes. The employer half of payroll taxes is also excluded, so the true wedge on labor is larger than shown. Before 1971 single filers used the joint schedule on half the brackets.';q('#m-note').style.display='';
+  q('#m-note').textContent='Simplifications: no earned income credit (small for a single filer without children), no phase-out of the personal exemption, no alternative minimum tax, no state or local taxes. The first two views leave out the employer half of payroll taxes; the third view puts it in the denominator. Before 1971 single filers used the joint schedule on half the brackets.';q('#m-note').style.display='';
   q('#m-err').style.display='none';
   var m=q('#modal');m.hidden=false;document.body.style.overflow='hidden';
   renderCurves(q('#m-curves'),tc);
@@ -524,6 +559,143 @@ function openMaturityModal(m,btn){
   q('#m-err').textContent=m.error?'Last fetch error: '+m.error:'';q('#m-err').style.display=m.error?'':'none';
   var md=q('#modal');md.hidden=false;document.body.style.overflow='hidden';
   drawMaturity(m);q('#m-close').focus();
+}
+
+/* ---------- where people work (industries) ---------- */
+function jobsFmt(v){var a=Math.abs(v);return (v<0?minus:'')+(a>=1000?(a/1000).toFixed(1)+'M':Math.round(a)+'k');}
+function jobsSgn(d){if(d==null)return '—';var a=Math.abs(d);return (a<0.5?'':(d>0?'+':minus))+(a>=1000?(a/1000).toFixed(1)+'M':Math.round(a)+'k');}
+function sparkSVG(h,w,ht){
+  var v=h&&h.v;if(!v||v.length<2)return '';
+  var mx=Math.max.apply(null,v);if(!(mx>0))return '';
+  var n=v.length,d=v.map(function(y,i){return (i?'L':'M')+(1+i/(n-1)*(w-2)).toFixed(1)+' '+(ht-1.5-y/mx*(ht-4)).toFixed(1);}).join('');
+  return '<svg class="spark" width="'+w+'" height="'+ht+'" viewBox="0 0 '+w+' '+ht+'" role="img" aria-label="'+h.x[0]+' to '+h.x[n-1]+': '+jobsFmt(v[0])+' to '+jobsFmt(v[n-1])+'"><title>'+h.x[0]+': '+jobsFmt(v[0])+' → '+h.x[n-1]+': '+jobsFmt(v[n-1])+'</title><line x1="1" x2="'+(w-1)+'" y1="'+(ht-1.5)+'" y2="'+(ht-1.5)+'" stroke="var(--border)"/><path d="'+d+'" fill="none" stroke="var(--c1)" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+}
+function indLeaves(ind){
+  // rows that do not overlap: every level-1 row, plus level-0 rows with no level-1 rows beneath them
+  var rows=ind.rows.filter(function(r){return r.name!==ind.total_name;}),out=[];
+  rows.forEach(function(r,i){if(r.level>0)out.push(r);else{var nx=rows[i+1];if(!nx||nx.level===0)out.push(r);}});
+  return out;
+}
+function indFind(ind,re){for(var i=0;i<ind.rows.length;i++)if(re.test(ind.rows[i].name))return ind.rows[i];return null;}
+function rankBars(items,opt){
+  // items: [{label,value,color,sub,title}], horizontal bars proportional to the largest absolute value
+  var max=opt.max||Math.max.apply(null,items.map(function(x){return Math.abs(x.value);}))||1;
+  return '<div class="bars'+(opt.big?' big':'')+(opt.cls?' '+opt.cls:'')+'">'+items.map(function(x,k){
+    return '<span class="bl'+(x.indent?' ind':'')+'" title="'+esc(x.title||x.label)+'">'+esc(x.label)+'</span><span class="bt"><span class="bf" style="width:'+(Math.abs(x.value)/max*100).toFixed(1)+'%;background:'+(x.color||CAT[k%CAT.length])+'"></span></span><span class="bv">'+(opt.fmt||jobsFmt)(x.value)+(x.sub?' <span class="sh">'+x.sub+'</span>':'')+'</span>';
+  }).join('')+'</div>';
+}
+function divergeBars(items,fmt){
+  // two-sided bars: declines to the left of a centre line, gains to the right
+  var max=Math.max.apply(null,items.map(function(x){return Math.abs(x.value);}))||1;
+  return '<div class="dbars">'+items.map(function(x){
+    var w=(Math.abs(x.value)/max*50).toFixed(1),neg=x.value<0;
+    return '<span class="bl" title="'+esc(x.title||x.label)+'">'+esc(x.label)+'</span><span class="dt"><span class="df'+(neg?' neg':'')+'" style="width:'+w+'%;'+(neg?'right:50%':'left:50%')+'"></span></span><span class="bv">'+fmt(x.value)+'</span>';
+  }).join('')+'</div>';
+}
+function shortName(r){return r.short||r.name.replace(/ \(.*\)$/,'');}
+function bars4(items,opt){
+  // label | bar | value | second value, bars proportional to the largest value
+  var max=Math.max.apply(null,items.map(function(x){return Math.abs(x.value);}))||1,f=opt.fmt||jobsFmt;
+  return '<div class="bars4'+(opt.cls?' '+opt.cls:'')+'"><span class="bh"></span><span class="bh"></span><span class="bh">'+esc(opt.h1||'')+'</span><span class="bh">'+esc(opt.h2||'')+'</span>'+items.map(function(x,k){
+    return '<span class="bl" title="'+esc(x.title||x.label)+'">'+esc(x.label)+'</span><span class="bt"><span class="bf" style="width:'+(Math.abs(x.value)/max*100).toFixed(1)+'%;background:'+(x.color||CAT[k%CAT.length])+'"></span></span><span class="bv">'+f(x.value)+'</span><span class="bv b2'+(x.v2<0?' neg':'')+'">'+(x.v2txt||'')+'</span>';
+  }).join('')+'</div>';
+}
+function industriesTile(ind){
+  if(!ind.rows)return emptyTile('Where people work','Not available yet. The source could not be read on the last run.');
+  var b=document.createElement('button');b.className='tile wide';b.type='button';b.setAttribute('aria-haspopup','dialog');
+  var sectors=ind.rows.filter(function(r){return r.level===0&&!r.outside&&r.name!==ind.total_name;}).sort(function(a,c){return c.value-a.value;});
+  var top=sectors.slice(0,11),rest=sectors.slice(11);
+  var items=top.map(function(r,k){var d=r.prev_10y!=null?r.value-r.prev_10y:null;return {label:shortName(r),title:r.name,value:r.value,color:CAT[k%CAT.length],v2:d,v2txt:jobsSgn(d)};});
+  if(rest.length){var rv=rest.reduce(function(a,r){return a+r.value;},0),rd=rest.every(function(r){return r.prev_10y!=null;})?rest.reduce(function(a,r){return a+r.value-r.prev_10y;},0):null;items.push({label:'All other sectors',value:rv,color:'var(--faint)',v2:rd,v2txt:jobsSgn(rd),title:rest.map(function(r){return r.name;}).join(', ')});}
+  var chips=[[/^Hospitals/,'in hospitals'],[/^Manufacturing/,'in manufacturing'],[/^Scientific research/,'in research and development firms']].map(function(c){var r=indFind(ind,c[0]);return r?'<span class="chip"><b>'+jobsFmt(r.value)+'</b> '+c[1]+'</span>':'';}).join('');
+  var foot=ind.stale?'<span class="stale">Source unavailable since '+esc(ind.stale_since||'today')+'; showing older data</span>':'<span>Updated '+esc(ind.updated||'')+'</span>';
+  b.innerHTML='<div class="tile-head"><span class="tile-title">Where people work</span><span class="tile-period">'+esc(ind.period||'')+'</span></div>'+
+    '<div class="tile-value"><span class="num">'+jobsFmt(ind.total)+'</span><span class="chips">'+chips+'</span></div>'+
+    '<div class="list-body"><div class="mini-cap">Jobs on nonfarm payrolls by sector, and the change over ten years; open for hospitals, schools, restaurants, software and forty other detailed industries</div>'+bars4(items,{h1:'Jobs',h2:'10 yrs'})+'</div>'+
+    '<div class="tile-foot"><span>BLS payroll survey (CES), via FRED</span>'+foot+'</div>';
+  b.addEventListener('click',function(){openIndustriesModal(ind,b);});
+  return b;
+}
+function openIndustriesModal(ind,btn){
+  current={kind:'industries',ind:ind};opener=btn;
+  q('#m-title').textContent='Where people work';
+  q('#m-sub').textContent='Jobs on employers’ payrolls by sector and, within the big sectors, by detailed industry';
+  q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
+  q('#m-num').textContent=jobsFmt(ind.total)+' jobs';q('#m-period').textContent=ind.period||'';
+  var chips=[[/^Hospitals/,'in hospitals'],[/^Ambulatory/,'in doctors’ offices, clinics and home health'],[/^Manufacturing/,'in manufacturing'],[/^Scientific research/,'in R&D firms'],[/^Public schools/,'in public schools'],[/^Restaurants/,'in restaurants and bars']].map(function(c){var r=indFind(ind,c[0]);return r?'<span class="chip"><b>'+jobsFmt(r.value)+'</b> '+c[1]+'</span>':'';}).join('');
+  q('#m-chips').className='chips';q('#m-chips').innerHTML=chips;
+  var rows=ind.rows.filter(function(r){return r.name!==ind.total_name;});
+  var tbl='<table class="ptable itable"><tr><th>Industry</th><th>Jobs</th><th>Share of all jobs</th><th>1 year</th><th>10 years</th><th>25 years</th><th>Since 1990</th></tr>';
+  rows.forEach(function(r){
+    var cls=(r.level>0?'sub':'sec')+(r.outside?' outside':'');
+    tbl+='<tr class="'+cls+'"><td>'+esc(r.name)+(r.stale_month?' <span class="stale" title="Latest month not yet published for this series">†</span>':'')+'</td><td>'+jobsFmt(r.value)+'</td><td>'+(r.share!=null?r.share.toFixed(1)+'%':'—')+'</td><td>'+jobsSgn(r.prev_year!=null?r.value-r.prev_year:null)+'</td><td>'+jobsSgn(r.prev_10y!=null?r.value-r.prev_10y:null)+'</td><td>'+jobsSgn(r.prev_25y!=null?r.value-r.prev_25y:null)+'</td><td class="sp">'+sparkSVG(r.hist,90,22)+'</td></tr>';
+  });
+  tbl+='</table>';
+  var leaves=indLeaves(ind).filter(function(r){return r.prev_10y!=null&&!r.outside;}).map(function(r){return {label:shortName(r),title:r.name,value:r.value-r.prev_10y};}).sort(function(a,c){return c.value-a.value;});
+  q('#m-comp').innerHTML='<div class="sect"><h3>By sector and detailed industry</h3><span class="hint">Indented rows are part of the sector above them and do not add up to it; the sparklines run from 1990 on a scale that starts at zero</span></div>'+tbl+
+    '<div class="sect"><h3>Change over the last ten years</h3><span class="hint">Non-overlapping payroll industries: the detailed rows above, plus the sectors shown without detail</span></div>'+divergeBars(leaves,jobsSgn);
+  var errs=ind.errors&&Object.keys(ind.errors).length?'Could not load: '+Object.keys(ind.errors).join(', ')+'.':'';
+  q('#m-meta').innerHTML='<dt>Source</dt><dd>BLS Current Employment Statistics (the payroll survey), via <a href="https://fred.stlouisfed.org/series/PAYEMS" target="_blank" rel="noopener">FRED</a>; the series ids are listed in <a href="https://github.com/josephwroot/econ-dashboard/blob/main/manifest.yaml" target="_blank" rel="noopener">manifest.yaml</a></dd><dt>Units</dt><dd>Thousands of jobs, seasonally adjusted; changes compare the same month</dd><dt>Frequency</dt><dd>Monthly, in the jobs report on the first Friday of the month</dd><dt>Last updated</dt><dd>'+esc(ind.updated||'')+(ind.stale?' <span class="stale">(source unavailable since '+esc(ind.stale_since||'today')+')</span>':'')+'</dd><dt>Next release</dt><dd>'+esc(ind.next||'')+'</dd>';
+  q('#m-note').textContent='The payroll survey counts jobs, not people, so someone with two jobs appears twice, and it leaves out the self-employed (about 10 million people), farm workers, household employees, unpaid family workers, and the roughly 1.3 million active-duty military. The farming row comes from the household survey instead, counts people including self-employed farmers, and is not part of the total. Research is spread across the economy: the row for scientific R&D covers firms whose business is research; researchers at universities are counted in education, those at hospitals in hospitals, and those in company labs in the company’s industry (a drug company’s chemists are in chemicals).';q('#m-note').style.display='';
+  q('#m-err').textContent=errs||(ind.error?'Last fetch error: '+ind.error:'');q('#m-err').style.display=(errs||ind.error)?'':'none';
+  var md=q('#modal');md.hidden=false;document.body.style.overflow='hidden';
+  q('#m-close').focus();
+}
+
+/* ---------- the most common jobs (occupations) ---------- */
+function wageFmt(r){if(r.median==null)return '—';return '$'+Math.round(r.median/1000)+'k'+(r.median_capped?'+':'');}
+function occCurve(occ,w,h){
+  var top=occ.top,n=top.length,mL=30,mB=18,mT=6,mR=6,ymax=Math.ceil((top[n-1].cum_share||50)/10)*10;
+  var X=function(i){return mL+i/n*(w-mL-mR);},Y=function(v){return mT+(1-v/ymax)*(h-mT-mB);};
+  var g='';
+  for(var v=0;v<=ymax;v+=ymax/2)g+='<line x1="'+mL+'" x2="'+(w-mR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'" stroke="var(--border)"/><text font-size="10.5" fill="var(--faint)" x="'+(mL-4)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+v+'%</text>';
+  [1,10,20,30,40].forEach(function(k){if(k<=n)g+='<text font-size="10.5" fill="var(--faint)" x="'+X(k).toFixed(1)+'" y="'+(h-4)+'" text-anchor="middle">'+k+'</text>';});
+  var d='M'+X(0).toFixed(1)+' '+Y(0).toFixed(1);
+  top.forEach(function(r,i){d+='L'+X(i+1).toFixed(1)+' '+Y(r.cum_share).toFixed(1);});
+  g+='<path d="'+d+'" fill="none" stroke="var(--c1)" stroke-width="2" stroke-linejoin="round"/>';
+  [10,25,40].forEach(function(k){if(k<=n){var r=top[k-1];g+='<circle cx="'+X(k).toFixed(1)+'" cy="'+Y(r.cum_share).toFixed(1)+'" r="3" fill="var(--c1)"/><text font-size="10.5" fill="var(--muted)" x="'+(X(k)-6).toFixed(1)+'" y="'+(Y(r.cum_share)-6).toFixed(1)+'" text-anchor="end">'+r.cum_share.toFixed(0)+'%</text>';}});
+  return '<svg viewBox="0 0 '+w+' '+h+'" aria-hidden="true">'+g+'</svg>';
+}
+var OCC_SHORT={'Laborers and Freight, Stock, and Material Movers, Hand':'Freight and stock movers','Home Health and Personal Care Aides':'Home health aides','Fast Food and Counter Workers':'Fast food and counter workers','General and Operations Managers':'General managers','Customer Service Representatives':'Customer service reps','Office Clerks, General':'Office clerks','Stockers and Order Fillers':'Stockers and order fillers','Janitors and Cleaners, Except Maids and Housekeeping Cleaners':'Janitors and cleaners','Heavy and Tractor-Trailer Truck Drivers':'Heavy truck drivers','Secretaries and Administrative Assistants, Except Legal, Medical, and Executive':'Secretaries, admin assistants','Bookkeeping, Accounting, and Auditing Clerks':'Bookkeeping and accounting clerks','Maintenance and Repair Workers, General':'Maintenance and repair workers','First-Line Supervisors of Office and Administrative Support Workers':'Office supervisors','First-Line Supervisors of Retail Sales Workers':'Retail supervisors','First-Line Supervisors of Food Preparation and Serving Workers':'Restaurant supervisors','Elementary School Teachers, Except Special Education':'Elementary school teachers','Secondary School Teachers, Except Special and Career/Technical Education':'High school teachers','Teaching Assistants, Except Postsecondary':'Teaching assistants','Cooks, Restaurant':'Restaurant cooks','Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products':'Sales representatives, wholesale','Landscaping and Groundskeeping Workers':'Landscapers and groundskeepers','Medical Secretaries and Administrative Assistants':'Medical secretaries','Shipping, Receiving, and Inventory Clerks':'Shipping and inventory clerks','Market Research Analysts and Marketing Specialists':'Marketing specialists','Industrial Truck and Tractor Operators':'Forklift operators','Licensed Practical and Licensed Vocational Nurses':'Licensed practical nurses','Automotive Service Technicians and Mechanics':'Auto mechanics','Receptionists and Information Clerks':'Receptionists','Managers, All Other':'Managers, all other'};
+function occShort(t){
+  if(OCC_SHORT[t])return OCC_SHORT[t];
+  var x=t.replace(/, Except .*$/,'').replace(/, All Other$/,', all other').replace(/^First-Line Supervisors of (.*)$/,'$1 supervisors');
+  return x.charAt(0)+x.slice(1).replace(/\b([A-Z])([a-z])/g,function(m,a,b){return a.toLowerCase()+b;});
+}
+function occupationsTile(occ){
+  if(!occ.top)return emptyTile('The most common jobs','Not available yet. The source could not be read on the last run.');
+  var b=document.createElement('button');b.className='tile wide';b.type='button';b.setAttribute('aria-haspopup','dialog');
+  var items=occ.top.slice(0,12).map(function(r,k){return {label:occShort(r.title),title:r.title,value:r.emp/1000,color:CAT[k%CAT.length],v2txt:wageFmt(r)};});
+  var top10=occ.top[9]?occ.top[9].cum_share:null;
+  var chips=(occ.median_all!=null?'<span class="chip"><b>$'+withCommas(occ.median_all)+'</b> median annual wage, all jobs</span>':'')+(top10!=null?'<span class="chip"><b>'+top10.toFixed(0)+'%</b> of jobs are in the 10 most common occupations</span>':'');
+  var foot=occ.stale?'<span class="stale">Source unavailable since '+esc(occ.stale_since||'today')+'; showing older data</span>':'<span>'+esc(occ.updated||'')+'</span>';
+  b.innerHTML='<div class="tile-head"><span class="tile-title">The most common jobs</span><span class="tile-period">May '+occ.year+'</span></div>'+
+    '<div class="tile-value"><span class="num">'+jobsFmt(occ.total_emp/1000)+'</span><span class="chips">'+chips+'</span></div>'+
+    '<div class="list-body"><div class="mini-cap">The twelve largest of '+occ.n_detailed+' detailed occupations, with the median annual wage; open for the top forty and the broad groups</div>'+bars4(items,{h1:'Jobs',h2:'Median'})+'</div>'+
+    '<div class="tile-foot"><span>BLS Occupational Employment and Wage Statistics</span>'+foot+'</div>';
+  b.addEventListener('click',function(){openOccupationsModal(occ,b);});
+  return b;
+}
+function openOccupationsModal(occ,btn){
+  current={kind:'occupations',occ:occ};opener=btn;
+  q('#m-title').textContent='The most common jobs';
+  q('#m-sub').textContent='Wage and salary jobs by detailed occupation, from the survey of employers behind the official wage statistics';
+  q('#m-controls').style.display='none';q('#m-chart').style.display='none';q('#m-comp').style.display='';
+  q('#m-num').textContent=jobsFmt(occ.total_emp/1000)+' jobs';q('#m-period').textContent='May '+occ.year;
+  var top10=occ.top[9]?occ.top[9].cum_share:null,top40=occ.top[occ.top.length-1].cum_share;
+  q('#m-chips').className='chips';q('#m-chips').innerHTML=(occ.median_all!=null?'<span class="chip"><b>$'+withCommas(occ.median_all)+'</b> median annual wage</span>':'')+(occ.mean_all!=null?'<span class="chip"><b>$'+withCommas(occ.mean_all)+'</b> mean</span>':'')+'<span class="chip"><b>'+occ.n_detailed+'</b> detailed occupations</span>'+(top10!=null?'<span class="chip"><b>'+top10.toFixed(0)+'%</b> of jobs in the top 10</span>':'')+'<span class="chip"><b>'+top40.toFixed(0)+'%</b> in the top '+occ.top.length+'</span>';
+  var tbl='<table class="ptable otable"><tr><th>#</th><th>Occupation</th><th>Jobs</th><th>Share</th><th>Cumulative</th><th>Median annual wage</th></tr>';
+  occ.top.forEach(function(r,i){tbl+='<tr><td>'+(i+1)+'</td><td>'+esc(r.title)+' <span class="code">'+esc(r.code)+'</span></td><td>'+jobsFmt(r.emp/1000)+'</td><td>'+r.share.toFixed(1)+'%</td><td>'+r.cum_share.toFixed(1)+'%</td><td>'+(r.median!=null?'$'+withCommas(r.median)+(r.median_capped?' or more':''):'—')+'</td></tr>';});
+  tbl+='</table>';
+  var groups=occ.groups.slice().sort(function(a,c){return c.emp-a.emp;}).map(function(r,k){return {label:r.title.replace(/ Occupations$/,''),title:r.title,value:r.emp/1000,color:CAT[k%CAT.length],sub:r.share.toFixed(1)+'% · '+wageFmt(r)+' median'};});
+  q('#m-comp').innerHTML='<div class="sect"><h3>How concentrated jobs are</h3><span class="hint">Share of all jobs in the N most common detailed occupations</span></div><div class="mini occ-curve">'+occCurve(occ,600,200)+'</div>'+
+    '<div class="sect"><h3>The '+occ.top.length+' most common detailed occupations</h3><span class="hint">Cumulative is the share of all jobs in this occupation and every one above it</span></div>'+tbl+
+    '<div class="sect"><h3>By broad occupational group</h3><span class="hint">The 22 major groups of the Standard Occupational Classification; jobs, share, and median wage</span></div>'+rankBars(groups,{big:true,cls:'wl'});
+  q('#m-meta').innerHTML='<dt>Source</dt><dd>BLS <a href="https://www.bls.gov/oes/" target="_blank" rel="noopener">Occupational Employment and Wage Statistics</a>, national file for May '+occ.year+(occ.source_url?' (<a href="'+esc(occ.source_url)+'" target="_blank" rel="noopener">zip</a>)':'')+'</dd><dt>Units</dt><dd>Jobs (employment) and median annual wages; hourly wages are annualized at 2,080 hours</dd><dt>Frequency</dt><dd>Annual, published each spring for the previous May</dd><dt>Last updated</dt><dd>'+esc(occ.updated||'')+(occ.stale?' <span class="stale">(source unavailable since '+esc(occ.stale_since||'today')+')</span>':'')+'</dd><dt>Next release</dt><dd>'+esc(occ.next||'')+'</dd>';
+  q('#m-note').textContent='Job titles come in layers. The Standard Occupational Classification sorts every job into 22 major groups, about 100 minor groups, 450 broad occupations, and some 830 detailed occupations, which is the finest level the BLS publishes and the one shown here; a registered nurse, a cashier, or a software developer is one detailed occupation, while employers’ own titles (senior staff engineer, barista) are folded into these. The survey covers wage and salary jobs at nonfarm establishments and so leaves out the self-employed, farm workers, household workers, and the military. Where a median wage is shown as $239,200 or more, the BLS does not publish the exact figure.';q('#m-note').style.display='';
+  q('#m-err').textContent=occ.error?'Last fetch error: '+occ.error:'';q('#m-err').style.display=occ.error?'':'none';
+  var md=q('#modal');md.hidden=false;document.body.style.overflow='hidden';
+  q('#m-close').focus();
 }
 
 /* ---------- who pays the income tax ---------- */
@@ -721,6 +893,8 @@ function build(dash){
   if(dash.taxshares&&(dash.taxshares.points||dash.taxshares.error))all.push({s:{group:'fiscal'},o:60,i:n0++,make:function(){return taxsharesTile(dash.taxshares);}});
   if(dash.tax_curves&&dash.tax_curves.curves&&dash.tax_curves.curves.length)all.push({s:{group:'fiscal'},o:70,i:n0++,make:function(){return curvesTile(dash.tax_curves);}});
   if(dash.maturity&&(dash.maturity.buckets||dash.maturity.error))all.push({s:{group:'debt'},o:35,i:n0++,make:function(){return maturityTile(dash.maturity);}});
+  if(dash.industries&&(dash.industries.rows||dash.industries.error))all.push({s:{group:'labor'},o:51,i:n0++,make:function(){return industriesTile(dash.industries);}});
+  if(dash.occupations&&(dash.occupations.top||dash.occupations.error))all.push({s:{group:'labor'},o:52,i:n0++,make:function(){return occupationsTile(dash.occupations);}});
   dash.groups.forEach(function(gr){
     var items=all.filter(function(x){return x.s.group===gr.id;}).sort(function(a,b){return a.o-b.o||a.i-b.i;});
     if(!items.length)return;

@@ -20,7 +20,7 @@ import requests
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from taxlaw import TAXLAW, INCOME_CLASSES, INCOME_CLASSES_YEAR, income_tax, payroll_tax, marginal_rate  # noqa: E402
+from taxlaw import TAXLAW, INCOME_CLASSES, INCOME_CLASSES_YEAR, income_tax, payroll_tax, employer_payroll_tax, marginal_rate  # noqa: E402
 import extras  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -451,6 +451,54 @@ def build_tic_fred(cfg):
     }
 
 
+# ---------------------------------------------------------------- employment by detailed industry
+def build_industries(cfg):
+    """A curated two-level list of industries with current employment, changes, and a yearly history."""
+    rows, errors = [], {}
+    total_obs = None
+    for r in cfg['rows']:
+        try:
+            sid = fred_resolve(r['series'], r.get('title'))
+            obs = fred_obs(sid)
+            f = float(r.get('factor', 1))
+            obs = [(d, v * f) for d, v in obs]
+        except Exception as e:  # noqa: BLE001
+            errors[r['name']] = f'{type(e).__name__}: {e}'
+            log(f'note  industries: {r["name"]}: {e}')
+            continue
+        m = dict(obs)
+        last_d, last_v = obs[-1]
+        y, mo = int(last_d[:4]), int(last_d[5:7])
+        prev1 = m.get(f'{y - 1}-{mo:02d}-01')
+        prev10 = m.get(f'{y - 10}-{mo:02d}-01')
+        prev25 = m.get(f'{y - 25}-{mo:02d}-01')
+        # yearly history: the same month each year, back to 1990 where it exists
+        hx, hv = [], []
+        for yy in range(1990, y + 1):
+            v = m.get(f'{yy}-{mo:02d}-01')
+            if v is not None:
+                hx.append(yy)
+                hv.append(round(v, 1))
+        row = {'name': r['name'], 'level': int(r.get('level', 0)), 'series': sid, 'value': last_v, 'as_of': last_d,
+               'prev_year': prev1, 'prev_10y': prev10, 'prev_25y': prev25, 'hist': {'x': hx, 'v': hv},
+               'note': r.get('note', ''), 'outside': bool(r.get('outside'))}
+        rows.append(row)
+        if r.get('total'):
+            total_obs = row
+    if not rows:
+        raise RuntimeError('industries: every series failed; ' + '; '.join(f'{k}: {v}' for k, v in list(errors.items())[:5]))
+    if total_obs is None:
+        raise RuntimeError('industries: the total row failed: ' + errors.get(next((r['name'] for r in cfg['rows'] if r.get('total')), ''), 'not configured'))
+    as_of = total_obs['as_of']
+    meta = fred_meta(total_obs['series'])
+    for row in rows:
+        row['share'] = row['value'] / total_obs['value'] * 100 if not row['outside'] else None
+        row['stale_month'] = row['as_of'] != as_of
+    return {'as_of': as_of, 'period': period_label(as_of, 'M'), 'total': total_obs['value'], 'total_name': total_obs['name'],
+            'rows': rows, 'errors': errors, 'last_updated': meta.get('last_updated'),
+            'release_id': meta.get('release_id'), 'release_name': meta.get('release_name')}
+
+
 # ---------------------------------------------------------------- Census
 def census_nim():
     base = 'https://www2.census.gov/programs-surveys/popest/datasets'
@@ -705,17 +753,20 @@ def tax_curves(out_series, out_comp, cpi_obs):
     for year in sorted(TAXLAW):
         law = TAXLAW[year]
         factor = 1.0 if year >= base_year else (cpi_year.get(year, cpi_now) / cpi_now)
-        share_all, share_inc, mtr = [], [], []
+        share_all, share_inc, share_cost, mtr = [], [], [], []
         for y in incomes:
             yn = y * factor
             it = income_tax(yn, law)
             pt = payroll_tax(yn, law)
+            ept = employer_payroll_tax(yn, law)
             share_inc.append(round((1 - it / yn) * 100, 3))
             share_all.append(round((1 - (it + pt) / yn) * 100, 3))
+            # take-home pay as a share of what the job costs the employer (wages plus the employer's payroll tax)
+            share_cost.append(round((yn - it - pt) / (yn + ept) * 100, 3))
             mtr.append(marginal_rate(yn, law))
         curves.append({'year': year, 'label': law['label'], 'law': law['law'], 'cpi_factor': round(factor, 4),
-                       'share': share_all, 'share_income_tax_only': share_inc, 'marginal': mtr,
-                       'current': year == max(TAXLAW)})
+                       'share': share_all, 'share_income_tax_only': share_inc, 'share_total_cost': share_cost,
+                       'marginal': mtr, 'current': year == max(TAXLAW)})
     cur_year = max(TAXLAW)
     cur = TAXLAW[cur_year]
     # income distribution scaled from the SOI year to now by nominal GDP per year
@@ -948,7 +999,7 @@ def main():
             log(f'FAIL  {name:14s} {err[:600]}')
             traceback.print_exc()
             old = prev.get(name)
-            if old and (old.get('points') or old.get('buckets')):
+            if old and (old.get('points') or old.get('buckets') or old.get('rows') or old.get('top')):
                 old = dict(old)
                 old['stale'] = True
                 old['error'] = err
@@ -968,6 +1019,26 @@ def main():
             w.writerow(['maturity_year'] + maturity['wall']['types'])
             for y, amts in zip(maturity['wall']['years'], maturity['wall']['amounts']):
                 w.writerow([y] + [round(a, 3) for a in amts])
+    industries = extra_block('industries', lambda: build_industries(man['industries'])) if man.get('industries') else {}
+    if industries.get('rows'):
+        industries['updated'] = fmt_date(industries.get('last_updated'))
+        industries['next'] = fmt_date(next_by_release[industries['release_id']]) if industries.get('release_id') in next_by_release else ''
+        log(f'ok    industries     {len(industries["rows"])} rows as of {industries["as_of"]}, total {industries["total"]:.0f}k' + (f'; {len(industries["errors"])} failed: {list(industries["errors"])}' if industries.get('errors') else ''))
+        with open(os.path.join(CSVDIR, 'employment_by_industry.csv'), 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['industry', 'level', 'fred_series', 'as_of', 'employment_thousands', 'year_earlier', 'ten_years_earlier', 'share_of_nonfarm_pct'])
+            for r in industries['rows']:
+                w.writerow([r['name'], r['level'], r['series'], r['as_of'], r['value'], r['prev_year'], r['prev_10y'], round(r['share'], 3) if r['share'] is not None else ''])
+    occupations = extra_block('occupations', lambda: extras.build_occupations(S, TODAY_ET))
+    if occupations.get('top'):
+        occupations['updated'] = f'May {occupations["year"]} survey'
+        occupations['next'] = f'May {occupations["year"] + 1} estimates, published the following spring'
+        log(f'ok    occupations    May {occupations["year"]}: {occupations["n_detailed"]} occupations, total {occupations["total_emp"]:.0f}; top: ' + ', '.join(f'{t["title"]} {t["emp"]:.0f}' for t in occupations['top'][:5]))
+        with open(os.path.join(CSVDIR, 'occupations_top.csv'), 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['soc_code', 'occupation', 'employment', 'share_pct', 'median_annual_wage'])
+            for t in occupations['top']:
+                w.writerow([t['code'], t['title'], t['emp'], round(t['share'], 3), t['median']])
     taxshares = extra_block('taxshares', lambda: extras.build_income_tax_shares(S, TODAY_ET))
     if taxshares.get('points'):
         taxshares['updated'] = f'Tax year {taxshares["year"]}'
@@ -1000,6 +1071,8 @@ def main():
         'tax_curves': tc,
         'maturity': maturity,
         'taxshares': taxshares,
+        'industries': industries,
+        'occupations': occupations,
         'week_start': (TODAY_ET - dt.timedelta(days=TODAY_ET.weekday())).isoformat(),
         'today': TODAY_ET.isoformat(),
         'status': {'ok': len(status['ok']), 'stale': list(status['stale']), 'failed': list(status['failed'])},

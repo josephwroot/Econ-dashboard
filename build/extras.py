@@ -613,3 +613,89 @@ def build_income_tax_shares(session, today):
     elif detail_error:
         result['detail_error'] = detail_error
     return result
+
+
+# ---------------------------------------------------------------- BLS OEWS: the most common occupations
+def _col(headers, *names):
+    hl = [str(h or '').strip().upper() for h in headers]
+    for n in names:
+        if n in hl:
+            return hl.index(n)
+    return None
+
+
+def build_occupations(session, today):
+    """Top detailed occupations and the SOC major groups from the OEWS national file."""
+    import zipfile
+    base = 'https://www.bls.gov/oes/special-requests/'
+    tried = []
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; econ-dashboard/1.0; +https://github.com/josephwroot/econ-dashboard)',
+               'Accept': 'application/zip,application/octet-stream,*/*'}
+    content, year = None, None
+    for y in range(today.year - 1, today.year - 5, -1):
+        name = f'oesm{y % 100:02d}nat.zip'
+        try:
+            r = session.get(base + name, timeout=180, headers=headers)
+            tried.append(f'{r.status_code} {name} ({len(r.content)} bytes)')
+            if r.status_code == 200 and len(r.content) > 100000 and r.content[:2] == b'PK':
+                content, year = r.content, y
+                break
+        except Exception as e:  # noqa: BLE001
+            tried.append(f'{type(e).__name__} {name}')
+    if not content:
+        raise RuntimeError('OEWS national zip not found; tried ' + ', '.join(tried))
+    zf = zipfile.ZipFile(io.BytesIO(content))
+    xl = [n for n in zf.namelist() if n.lower().endswith(('.xlsx', '.xls')) and 'national' in n.lower() and 'field' not in n.lower()]
+    if not xl:
+        raise RuntimeError(f'OEWS zip has no national workbook; members: {zf.namelist()[:20]}')
+    grid = _grid_from_bytes(zf.read(xl[0]), xl[0])
+    hdr_i = None
+    for i, row in enumerate(grid[:10]):
+        if _col(row, 'OCC_CODE') is not None and _col(row, 'TOT_EMP') is not None:
+            hdr_i = i
+            break
+    if hdr_i is None:
+        raise RuntimeError(f'OEWS workbook {xl[0]}: header row not found; first rows {[r[:12] for r in grid[:5]]}')
+    h = grid[hdr_i]
+    c_code, c_title, c_group = _col(h, 'OCC_CODE'), _col(h, 'OCC_TITLE'), _col(h, 'O_GROUP', 'OCC_GROUP')
+    c_emp, c_med, c_mean = _col(h, 'TOT_EMP'), _col(h, 'A_MEDIAN'), _col(h, 'A_MEAN')
+    c_naics, c_own = _col(h, 'NAICS'), _col(h, 'OWN_CODE')
+    if c_group is None or c_med is None:
+        raise RuntimeError(f'OEWS workbook: columns {h}')
+    rows = []
+    for row in grid[hdr_i + 1:]:
+        if row is None or len(row) <= max(c_code, c_emp, c_group):
+            continue
+        if c_naics is not None and str(row[c_naics] or '').strip() not in ('000000', '0', '', 'None'):
+            continue
+        if c_own is not None and str(row[c_own] or '').strip() not in ('1235', '0', '', 'None'):
+            continue
+        emp = _num(row[c_emp])
+        if emp is None:
+            continue
+        rows.append({'code': str(row[c_code]).strip(), 'title': _cell_text(row[c_title]), 'group': str(row[c_group] or '').strip().lower(),
+                     'emp': emp, 'median': _num(row[c_med]), 'mean': _num(row[c_mean]) if c_mean is not None else None,
+                     'median_capped': str(row[c_med]).strip() == '#'})
+    total = next((r for r in rows if r['group'] == 'total' or r['code'] == '00-0000'), None)
+    if not total:
+        raise RuntimeError(f'OEWS: total row not found among {len(rows)} rows; groups seen {sorted({r["group"] for r in rows})}')
+    detailed = [r for r in rows if r['group'] == 'detailed']
+    majors = [r for r in rows if r['group'] == 'major']
+    if len(detailed) < 100 or len(majors) < 15:
+        raise RuntimeError(f'OEWS: {len(detailed)} detailed and {len(majors)} major rows; groups seen {sorted({r["group"] for r in rows})}')
+    detailed.sort(key=lambda r: -r['emp'])
+    majors.sort(key=lambda r: -r['emp'])
+    T = total['emp']
+
+    def pack(r):
+        return {'code': r['code'], 'title': r['title'], 'emp': r['emp'], 'share': r['emp'] / T * 100,
+                'median': r['median'], 'median_capped': r['median_capped']}
+    top = [pack(r) for r in detailed[:40]]
+    cum = 0.0
+    for r in top:
+        cum += r['share']
+        r['cum_share'] = cum
+    return {'year': year, 'source_url': base + f'oesm{year % 100:02d}nat.zip', 'workbook': xl[0],
+            'total_emp': T, 'median_all': total['median'], 'mean_all': total['mean'],
+            'n_detailed': len(detailed), 'top': top, 'groups': [pack(r) for r in majors],
+            'last_updated': f'{year}-05-01'}
