@@ -124,12 +124,12 @@ series:
     source:
       type: fred_multi
       lines:
-        - {label: Men, series: LNS11300061, title: "Labor Force Participation Rate - 25-54 Yrs., Men"}
-        - {label: Women, series: LNS11300062, title: "Labor Force Participation Rate - 25-54 Yrs., Women"}
-    src_label: BLS via FRED
-    url: https://fred.stlouisfed.org/series/LNS11300062
+        - {label: Men, series: LRAC25MAUSM156S, title: "Infra-Annual Labor Statistics: Labor Force Participation Rate Male: From 25 to 54 Years for United States"}
+        - {label: Women, series: LRAC25FEUSM156S, title: "Infra-Annual Labor Statistics: Labor Force Participation Rate Female: From 25 to 54 Years for United States"}
+    src_label: BLS data as compiled by the OECD, via FRED
+    url: https://fred.stlouisfed.org/series/LRAC25FEUSM156S
     freq_label: Monthly, seasonally adjusted
-    note: Restricted to ages 25 to 54 so that the aging of the population does not move the rates; the overall participation rate falls as the 65-and-over share of adults rises even when no age group changes its behavior. Women's rate rose from 45 percent in 1960 to about 77 percent and is now at its highest; men's has drifted down from 97 percent to about 89.
+    note: Restricted to ages 25 to 54 so that the aging of the population does not move the rates; the overall participation rate falls as the 65-and-over share of adults rises even when no age group changes its behavior. Women's rate rose from about 40 percent in the 1950s to around 78 percent and is near its highest; men's has drifted down from 97 percent to about 89.
 
   - id: cpi
     group: prices
