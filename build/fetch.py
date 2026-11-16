@@ -1029,7 +1029,7 @@ def main():
                 status['ok'].remove(cid)
             old = prev_comp.get(cid)
             if old and old.get('snapshot'):
-                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name', 'cats', 'extras', 'fetched_on', 'release', 'updated_text', 'next', 'source_url', 'n_latest') if k in old})
+                entry.update({k: old.get(k) for k in ('snapshot', 'hist', 'last_updated', 'updated', 'release_id', 'release_name', 'cats', 'extras', 'fetched_on', 'release', 'updated_text', 'next', 'source_url', 'n_latest', 'weights', 'unweighted_years', 'method') if k in old})
                 entry['stale'] = True
                 entry['error'] = err
                 entry['stale_since'] = old.get('stale_since') or fmt_date(TODAY_ET.isoformat())

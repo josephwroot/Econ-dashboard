@@ -745,6 +745,7 @@ GSS_ATTEND = [  # ATTEND codes: 0 never ... 7 every week, 8 several times a week
     ('A few times a year or less', {1, 2, 3}), ('Never', {0}),
 ]
 GSS_REFRESH_DAYS = 120
+GSS_METHOD = 'wtssps-first'  # bump to force a re-read after a change in how the shares are computed
 
 
 def build_gss_religion(session, today, prev=None):
@@ -752,7 +753,7 @@ def build_gss_religion(session, today, prev=None):
     import tempfile
     import zipfile
     prev = prev or {}
-    cached_ok = (prev.get('snapshot') and prev.get('hist') and prev.get('fetched_on') and not prev.get('stale')
+    cached_ok = (prev.get('snapshot') and prev.get('hist') and prev.get('fetched_on') and not prev.get('stale') and prev.get('method') == GSS_METHOD
                  and all(v is not None for _, v in prev['snapshot']['cats'])
                  and all(v is not None for _, vals in prev['hist']['cats'] for v in vals))
     if cached_ok:
@@ -761,7 +762,7 @@ def build_gss_religion(session, today, prev=None):
         except ValueError:
             age = 10 ** 6
         if age < GSS_REFRESH_DAYS:
-            out = {k: prev[k] for k in ('snapshot', 'hist', 'extras', 'fetched_on', 'release', 'last_updated', 'updated_text', 'next', 'source_url', 'n_latest', 'weights', 'unweighted_years') if k in prev}
+            out = {k: prev[k] for k in ('snapshot', 'hist', 'extras', 'fetched_on', 'release', 'last_updated', 'updated_text', 'next', 'source_url', 'n_latest', 'weights', 'unweighted_years', 'method') if k in prev}
             out['fetched'] = False
             return out
     import pandas as pd  # imported here so the rest of the build does not need it
@@ -852,7 +853,7 @@ def build_gss_religion(session, today, prev=None):
                'modes': ['share'], 'vfmt': 'pct', 'mode_labels': {'share': 'Share of adults'},
                'note': 'Answers to "How often do you attend religious services?", grouped. Self-reported attendance runs well above counts taken at the door.'}]
     return {'snapshot': snapshot, 'hist': hist, 'extras': extras, 'n_latest': n_rel[li],
-            'weights': wcols, 'unweighted_years': unweighted,
+            'weights': wcols, 'unweighted_years': unweighted, 'method': GSS_METHOD,
             'release': release, 'source_url': GSS_URL, 'fetched_on': today.isoformat(),
             'last_updated': today.isoformat() + ' 00:00:00-05',
             'updated_text': f'{today.strftime("%b %-d, %Y")} (GSS {release}, latest wave {latest})',
