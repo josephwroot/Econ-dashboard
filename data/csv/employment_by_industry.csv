@@ -24,14 +24,12 @@ Professional and business services,0,USPBS,2026-10-01,22604.0,22335.0,20303.0,14
 Computer systems design and related services,1,CES6054150001,2026-10-01,2354.1,2379.7,2016.4,1.478
 Management and technical consulting,1,CES6054160001,2026-10-01,1905.7,1860.0,1412.0,1.196
 Architecture and engineering services,1,CES6054130001,2026-10-01,1787.0,1736.8,1408.7,1.122
-Scientific research and development services,1,CES6054170001,2026-10-01,925.1,906.9,664.7,0.581
 Legal services,1,CES6054110001,2026-10-01,1251.2,1228.4,1127.1,0.785
 "Accounting, tax, and payroll services",1,CES6054120001,2026-10-01,1125.9,1126.4,982.8,0.707
 Employment services (temp and staffing agencies),1,CES6056130001,2026-10-01,3228.9,3137.7,3543.6,2.027
 Manufacturing,0,MANEMP,2026-10-01,12681.0,12603.0,12316.0,7.961
 Food manufacturing,1,CES3231100001,2026-10-01,1771.0,1785.0,1567.5,1.112
 Motor vehicles and parts,1,CES3133600101,2026-10-01,965.5,955.6,949.0,0.606
-Aerospace products and parts,1,CES3133640001,2026-09-01,598.6,566.3,489.6,0.376
 Computers and electronic products,1,CES3133400001,2026-10-01,1008.3,990.7,1011.7,0.633
 Fabricated metal products,1,CES3133200001,2026-10-01,1468.6,1438.7,1413.7,0.922
 Machinery,1,CES3133300001,2026-10-01,1104.0,1084.6,1067.5,0.693
@@ -48,12 +46,10 @@ Banks and other lenders,1,CES5552200001,2026-10-01,2528.1,2563.1,2623.1,1.587
 Real estate,1,CES5553100001,2026-10-01,1848.8,1852.7,1570.9,1.161
 Wholesale trade,0,USWTRADE,2026-10-01,6068.8,6054.6,5799.7,3.81
 Private schools and colleges,0,CES6561000001,2026-10-01,4053.3,4047.2,3607.1,2.545
-Private colleges and universities,1,CES6561130001,2026-09-01,1800.2,1829.0,1823.5,1.13
 Other services,0,USSERV,2026-10-01,6045.0,5999.0,5720.0,3.795
 "Religious, civic, and professional organizations",1,CES8081300001,2026-10-01,2944.2,2932.3,2968.2,1.848
 Repair and maintenance,1,CES8081100001,2026-10-01,1476.3,1469.3,1296.8,0.927
 Information,0,USINFO,2026-10-01,2734.0,2853.0,2814.0,1.716
-Software publishers,1,CES5051320001,2026-09-01,653.8,661.4,363.9,0.41
 Telecommunications,1,CES5051700001,2026-10-01,559.1,594.1,798.1,0.351
 Mining and logging,0,USMINE,2026-10-01,605.0,606.0,644.0,0.38
 Oil and gas extraction,1,CES1021100001,2026-10-01,113.9,115.7,158.6,0.072
