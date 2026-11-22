@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-21T22:11:41+00:00",
+ "generated_at": "2026-11-22T14:38:08+00:00",
  "ok": [
   "gdp_growth",
   "gdp_nominal",
@@ -8,6 +8,7 @@
   "unrate",
   "prime_epop",
   "payrolls",
+  "lfpr_sex",
   "cpi",
   "core_pce",
   "fedfunds",
@@ -41,9 +42,7 @@
   "occupations",
   "taxshares"
  ],
- "stale": {
-  "lfpr_sex": "HTTPError: 503 Server Error: Service Unavailable for url: https://api.bls.gov/publicAPI/v2/timeseries/data/"
- },
+ "stale": {},
  "failed": {},
  "notes": []
 }
