@@ -1,0 +1,792 @@
+% Appendix: beating FCFS without observing the FCFS queue.
+% Compiles standalone. To include in the paper, copy everything between
+% "BEGIN APPENDIX BODY" and "END APPENDIX BODY" (the body uses only amsmath,
+% amssymb, amsthm and the macros and theorem environments declared below).
+\documentclass[11pt]{article}
+\usepackage[margin=1.2in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+
+\newtheorem{bthm}{Theorem}[section]
+\newtheorem{blem}[bthm]{Lemma}
+\newtheorem{bprop}[bthm]{Proposition}
+\theoremstyle{definition}
+\newtheorem{bdef}[bthm]{Definition}
+\theoremstyle{remark}
+\newtheorem{brem}[bthm]{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\renewcommand{\Pr}{\mathbb{P}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\cX}{\mathcal{X}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cL}{\mathcal{L}}
+\newcommand{\Reps}{R^{\varepsilon}}
+\newcommand{\gp}{\mathsf{g}}
+\newcommand{\SvA}{\Sigma_A}
+\newcommand{\SvB}{\Sigma_B}
+\newcommand{\Poi}{\mathrm{Poi}}
+
+\begin{document}
+\appendix
+\renewcommand{\thesection}{B}
+
+% ============================ BEGIN APPENDIX BODY ============================
+\section{Beating FCFS without observing its state}\label{app:blind}
+
+The Ledger rule conditions on the state of the FCFS queue. This appendix shows
+that this is not necessary: queue $A$ can attract a strict majority of arrivals
+with a service rule that depends only on $A$'s own history. The rule uses two
+inferences. First, if an agent joins $A$ in slot $2$, then queue $B$ held at
+least two agents at that moment. Second, if $A$ then completes three services
+in a very short time, queue $B$ has almost surely not completed any, so it
+still holds at least two agents. Queue $A$ is then empty and can offer slot $1$
+rather than slot $0$: the offer still attracts the next arrival, and slot $0$
+is held in reserve for the arrival after that.
+
+Throughout, the model and notation are those of Sections~3 and~5.1: slots are
+indexed by $\N_0$, the service rate is $1$ at each queue, arrivals have rate
+$\lambda\in(0,2)$, queue $B$ uses FCFS, and agents minimize their expected
+waiting time, breaking ties with the draws $U_n$. We write $a(t)=|S_A(t)|$ and
+$b(t)=|S_B(t)|$, and all processes are taken right-continuous with left limits.
+Both queues start empty.
+
+\subsection{The rule and the result}
+
+\begin{bdef}\label{def:blind}
+A service rule for queue $A$ is \emph{blind} if its three mappings depend on
+the history $N(t)$ only through the current time, the service times of queue
+$A$, and the times at which agents joined queue $A$ together with the slots
+they were assigned.
+\end{bdef}
+
+A blind rule cannot condition on $S_B$, on arrivals that route to $B$, or on
+the service times of $B$.
+
+\begin{bdef}[The rule $\Reps$]\label{def:Reps}
+Fix $\varepsilon\in(0,1]$. At time $t$, let $\ell(t)$ be the time of the most
+recent join to queue $A$ strictly before $t$ and let $j(t)$ be the slot
+assigned at that join (if no agent has joined $A$, set $j(t)=-1$). Say that
+queue $A$ is \emph{armed} at $t$, and write $D(t)=1$, if
+\[
+  S_A(t)=\emptyset,\qquad j(t)=2,\qquad t-\ell(t)<\varepsilon ;
+\]
+otherwise $D(t)=0$. The rule $\Reps$ is:
+\begin{enumerate}
+\item \emph{Placement.} An agent arriving at time $t$ is offered slot $1$ if
+  $D(t^-)=1$, and slot $\min(\N_0\setminus S_A(t^-))$ otherwise.
+\item \emph{Service selection.} $\sigma_A=\min S_A$.
+\item \emph{Reassignment.} $\rho_A(i)=i-1$ for all $i\in S_A\setminus\{\sigma_A\}$.
+\end{enumerate}
+\end{bdef}
+
+The rule $\Reps$ is blind and work-conserving. It differs from FCFS only while
+armed, that is, only when $A$ is empty, its last arrival was placed in slot $2$,
+and this happened less than $\varepsilon$ ago (so that $A$ has completed three
+services within $\varepsilon$).
+
+\begin{bthm}\label{thm:blind}
+Fix $\lambda\in(0,2)$. There exist constants $\bar\varepsilon\in(0,1]$ and
+$\kappa>0$, depending only on $\lambda$, such that for every
+$\varepsilon\in(0,\bar\varepsilon)$ the following holds. If queue $A$ uses the
+blind rule $\Reps$, queue $B$ uses FCFS, and agents route optimally, then the
+asymptotic arrival rates $\alpha_A=\lim_{t\to\infty}N_A(t)/t$ and
+$\alpha_B=\lim_{t\to\infty}N_B(t)/t$ exist almost surely and
+\[
+  \alpha_A\;\ge\;\frac{\lambda}{2}
+  +\frac{\lambda^{2}\varepsilon^{4}}{2}
+  \Bigl(\kappa-\frac{\varepsilon^{2}}{12(1+\lambda)}\Bigr)\;>\;\frac{\lambda}{2}.
+\]
+\end{bthm}
+
+The remainder of this appendix proves Theorem~\ref{thm:blind}. The constants
+are $\kappa=\delta_2\,q/(384\,e^{4})$ and
+$\bar\varepsilon=\min\{1,\sqrt{12(1+\lambda)\kappa}\}$, where $\delta_2$ is
+defined in Lemma~\ref{lem:gap} and $q$ in Lemma~\ref{lem:occupation}.
+
+\subsection{Reachable states and optimal routing}
+
+Write $[k]=\{0,1,\dots,k-1\}$ for $k\ge 0$, so that $[0]=\emptyset$.
+
+\begin{blem}\label{lem:states}
+Under $\Reps$, at every time $S_A(t)\in\{[k]:k\ge0\}\cup\{\{1\}\}$, whatever
+the routing decisions of the agents.
+\end{blem}
+
+\begin{proof}
+The claim holds at $t=0$. Suppose $S_A=[k]$. A service completion gives
+$[k-1]$ if $k\ge1$ and leaves $S_A=\emptyset$ if $k=0$. An agent who joins is
+placed in slot $k$, giving $[k+1]$, unless $A$ is armed, in which case $k=0$
+and she is placed in slot $1$, giving $\{1\}$. Suppose $S_A=\{1\}$. Then $A$ is
+not armed, so an agent who joins is placed in slot $0$, giving $[2]$, and a
+service completion serves the agent in slot $1$, giving $\emptyset$.
+\end{proof}
+
+We therefore describe the system by the pair $X(t)=(x_A(t),b(t))$ together
+with the indicator $D(t)$, where $x_A=k$ if $S_A=[k]$ and $x_A=\gp$ if
+$S_A=\{1\}$. The state space of $X$ is
+\[
+  \cX=\{(k,b):k,b\in\N_0\}\cup\{(\gp,b):b\in\N_0\}.
+\]
+We call states $(k,b)$ \emph{gap-free} and states $(\gp,b)$ \emph{gap states}.
+For $x\in\cX$ let $a(x)$ and $b(x)$ denote the number of agents in $A$ and in
+$B$ (so $a(\gp,b)=1$), and let $n(x)=a(x)+b(x)$.
+
+The waiting time of an agent is the time from her arrival to her own service
+completion, so that an agent who joins the FCFS queue $B$ when it holds $b$
+agents has expected waiting time $b+1$.
+
+\begin{blem}[Optimal routing]\label{lem:routing}
+Suppose $A$ uses $\Reps$ and $B$ uses FCFS. Consider an agent who arrives when
+the state is $x$ and the armed indicator is $d$. Her optimal choice is the
+following, and does not depend on the strategies of other agents except in
+case~\emph{(iii)}, where it is optimal given that later agents route optimally.
+\begin{enumerate}
+\item[(i)] If $x=(k,b)$ and $d=0$: she joins $A$ if $k<b$, joins $B$ if $k>b$,
+  and is indifferent if $k=b$.
+\item[(ii)] If $x=(\gp,b)$: she joins $A$ if $b\ge1$ and is indifferent if
+  $b=0$.
+\item[(iii)] If $x=(0,b)$ and $d=1$: she joins $A$ if $b\ge1$ and joins $B$ if
+  $b=0$.
+\end{enumerate}
+\end{blem}
+
+\begin{proof}
+Joining $B$ gives expected waiting time $b+1$ in every case.
+
+(i) At $A$ she is placed in slot $k$ and slots $0,\dots,k-1$ are occupied.
+Since agents advance one slot at each service completion and no slot below her
+is ever empty, no later arrival can be placed below her, and she is served at
+exactly the $(k+1)$st service time of $A$ after her arrival. Her expected
+waiting time at $A$ is $k+1$.
+
+(ii) At $A$ she is placed in slot $0$ and is served at the next service time of
+$A$. Her expected waiting time at $A$ is $1$, against $b+1$ at $B$.
+
+(iii) At $A$ she is placed in slot $1$, and $S_A$ becomes $\{1\}$. Let $s$ be
+the first service time of $A$ after her arrival, and let $\pi_b$ be the
+probability that some later agent joins $A$ before $s$. Until $s$ or such a
+join, $S_A=\{1\}$, and by (ii) a later agent's decision in this situation does
+not depend on anyone else's strategy. If no agent joins before $s$, she is
+served at $s$. If an agent joins before $s$, that agent is placed in slot $0$
+and is served at $s$, after which our agent occupies slot $0$ and is served at
+the following service time of $A$. Since the event that an agent joins before
+$s$ is determined by time $s$ and the next service of $A$ takes a further
+expected time $1$, her expected waiting time at $A$ is $1+\pi_b$.
+
+Any agent who joins before $s$ arrives before $s$, so
+$\pi_b\le\lambda/(1+\lambda)<1$. Hence if $b\ge1$ her expected waiting time at
+$A$ is strictly below $2\le b+1$, and she joins $A$. If $b=0$, then with
+probability $\lambda/(1+\lambda)$ the next arrival occurs before $s$; at that
+moment $B$ is still empty, the arriving agent is indifferent by (ii), and she
+joins $A$ with probability $1/2$. Thus $\pi_0\ge\lambda/(2(1+\lambda))>0$, the
+expected waiting time at $A$ is strictly above $1$, and she joins $B$.
+\end{proof}
+
+\begin{brem}
+Case~(i) with $k=2$ gives the first inference: an agent who joins $A$ in slot
+$2$ reveals that $b\ge 2$ at that moment.
+\end{brem}
+
+\paragraph{Transitions.}
+By Lemmas~\ref{lem:states} and~\ref{lem:routing}, the process $X$ moves as
+follows. At a service time of $A$: $(k,b)\to((k-1)^+,b)$ and $(\gp,b)\to(0,b)$.
+At a service time of $B$: $(k,b)\to(k,(b-1)^+)$ and $(\gp,b)\to(\gp,(b-1)^+)$.
+At an arrival with tie-breaking draw $u\in\{A,B\}$ and armed indicator
+$d\in\{0,1\}$ immediately before the arrival:
+\begin{align*}
+d=0:\quad & (k,b)\to
+  \begin{cases}(k+1,b)&\text{if }k<b,\text{ or }k=b\text{ and }u=A,\\
+               (k,b+1)&\text{if }k>b,\text{ or }k=b\text{ and }u=B;\end{cases}\\
+& (\gp,b)\to
+  \begin{cases}(2,b)&\text{if }b\ge1,\text{ or }b=0\text{ and }u=A,\\
+               (\gp,1)&\text{if }b=0\text{ and }u=B;\end{cases}\\
+d=1:\quad & (0,b)\to
+  \begin{cases}(\gp,b)&\text{if }b\ge1,\\ (0,1)&\text{if }b=0.\end{cases}
+\end{align*}
+For $f:\cX\to\mathbb{R}$ and $d\in\{0,1\}$ define the corresponding generator
+\[
+  \cL_d f(x)=\lambda\bigl(\E_u f(\mathrm{arr}_d(x,u))-f(x)\bigr)
+  +\bigl(f(\mathrm{svc}_A(x))-f(x)\bigr)+\bigl(f(\mathrm{svc}_B(x))-f(x)\bigr),
+\]
+where $\mathrm{arr}_d$, $\mathrm{svc}_A$, $\mathrm{svc}_B$ are the three maps
+just described, $u$ is uniform on $\{A,B\}$, and $\cL_1$ is only applied at
+states $(0,b)$. The generator $\cL_0$ is defined on all of $\cX$; it is the
+generator of the Markov chain $X^0$ on $\cX$ in which $A$ always offers its
+lowest empty slot. Restricted to gap-free states, $X^0$ is the chain induced by
+two FCFS queues with shortest-queue routing.
+
+Let $\SvA$ and $\SvB$ denote the Poisson processes of service times, $N$ the
+Poisson process of arrivals, and $(\cF_t)$ the filtration generated by these
+processes and the tie-breaking draws of agents who have arrived. For $s<t$ we
+write $\SvA(s,t]$ for the number of service times of $A$ in $(s,t]$, and
+similarly for $\SvB$ and $N$.
+
+\begin{blem}[Compensation]\label{lem:dynkin}
+Let $f:\cX\to\mathbb{R}$ satisfy $|f(x)|\le c\,(1+n(x))^{2}$ for some constant
+$c$. Under $\Reps$ with optimal routing,
+\[
+  M^f(t)=f(X(t))-f(X(0))-\int_0^t \cL_{D(s)}f(X(s))\,ds
+\]
+is an $(\cF_t)$-martingale. The same holds for the chain $X^0$ with $\cL_0$ in
+place of $\cL_{D(s)}$, from any initial state.
+\end{blem}
+
+\begin{proof}
+The process $X$ is piecewise constant and jumps only at points of $\SvA$,
+$\SvB$ and $N$, and the jump at such a point is the image of $X(s^-)$ under
+$\mathrm{svc}_A$, $\mathrm{svc}_B$ or $\mathrm{arr}_{D(s^-)}(\cdot,u)$
+respectively, where $u$ is the draw of the arriving agent. Hence
+$f(X(t))-f(X(0))$ is a sum of integrals of the predictable integrands
+$f(\mathrm{svc}_A(X(s^-)))-f(X(s^-))$, $f(\mathrm{svc}_B(X(s^-)))-f(X(s^-))$ and
+$f(\mathrm{arr}_{D(s^-)}(X(s^-),u))-f(X(s^-))$ against $\SvA$, $\SvB$ and the
+marked Poisson process of arrivals. Since $n(X(s))\le n(X(0))+N(s)$, each
+integrand is bounded in absolute value by $2c\,(2+n(X(0))+N(t))^{2}$ on
+$[0,t]$, which has finite mean, and the number of jumps on $[0,t]$ has finite second moment. The
+compensation formula for marked Poisson processes (see, e.g.,
+Br\'emaud, 1981, Chapter~VIII) therefore shows that subtracting
+$\int_0^t\cL_{D(s^-)}f(X(s^-))\,ds$ yields a martingale. Finally $X(s^-)=X(s)$
+and $D(s^-)=D(s)$ for all but countably many $s$, so the integral equals
+$\int_0^t\cL_{D(s)}f(X(s))\,ds$.
+\end{proof}
+
+By the strong Markov property of the driving Poisson processes, the same
+conclusion holds for the process restarted at any stopping time, and the
+optional stopping theorem applies at bounded stopping times.
+
+\subsection{Reduction to busy times}
+
+Let $r:\cX\to\{-1,0,1\}$ be
+\[
+  r(x)=\ind\{a(x)>0\}-\ind\{b(x)>0\}.
+\]
+
+\begin{blem}\label{lem:busy}
+Under $\Reps$ with optimal routing, for every $T\ge0$,
+\[
+  \E\bigl[N_A(T)-N_B(T)\bigr]
+  =\E\int_0^T r(X(s))\,ds+\E\bigl[a(X(T))-b(X(T))\bigr].
+\]
+\end{blem}
+
+\begin{proof}
+Let $C_q(T)$ be the number of service completions at queue $q$ up to time $T$.
+Every agent who has joined $q$ has either been served or is still in $q$, so
+$N_A(T)=C_A(T)+a(X(T))$ and $N_B(T)=C_B(T)+b(X(T))$. A service time of $A$ is a
+service completion exactly when $A$ is non-empty immediately before it, so
+$C_A(T)=\int_0^T\ind\{a(X(s^-))>0\}\,d\SvA(s)$ and
+$\E\,C_A(T)=\E\int_0^T\ind\{a(X(s))>0\}\,ds$. The same holds for $B$.
+\end{proof}
+
+Thus $A$ attracts more arrivals than $B$ in the long run exactly when it is
+busy for a larger fraction of time.
+
+\subsection{The value function of FCFS}
+
+We now construct a function $h$ on $\cX$ that solves the Poisson equation
+$\cL_0h=-r$. On gap-free states, $h(k,b)$ measures the long-run advantage, in
+expected service completions, that $A$ derives from starting in $(k,b)$ when
+both queues offer their lowest empty slot.
+
+For the chain $X^0$ started from a gap-free state $(k,b)$, let
+$\tau=\inf\{t\ge0:a(X^0(t))=b(X^0(t))\}$. Define
+\begin{equation}\label{eq:hdef}
+  h(k,b)=
+  \begin{cases}
+    \E_{(k,b)}\displaystyle\int_0^{\tau}\ind\{b(X^0(s))=0\}\,ds & \text{if }k>b,\\[1ex]
+    0 & \text{if }k=b,\\[0.5ex]
+    -h(b,k) & \text{if }k<b.
+  \end{cases}
+\end{equation}
+
+\begin{blem}\label{lem:h}
+The function $h$ in \eqref{eq:hdef} is well defined and satisfies:
+\begin{enumerate}
+\item[(a)] $0<h(k,b)\le (k-b)/\lambda$ for all $k>b$; hence
+  $|h(k,b)|\le |k-b|/\lambda$ for all $k,b$.
+\item[(b)] $h(1,0)=1/(1+\lambda)$.
+\item[(c)] $\cL_0h(x)=-r(x)$ for every gap-free state $x$.
+\end{enumerate}
+\end{blem}
+
+\begin{proof}
+(a) Let $k>b$. On $[0,\tau)$ we have $a>b\ge0$, so every arrival joins $B$ and
+$A$ is busy. Applying Lemma~\ref{lem:dynkin} to $f(x)=a(x)-b(x)$, for which
+$\cL_0f(x)=-\lambda-1+\ind\{b(x)>0\}\le-\lambda$ whenever $a(x)>b(x)$, and
+stopping at $\tau\wedge t$, gives
+\[
+  0\le\E_{(k,b)}\bigl[a(X^0(\tau\wedge t))-b(X^0(\tau\wedge t))\bigr]
+  \le (k-b)-\lambda\,\E_{(k,b)}[\tau\wedge t].
+\]
+Letting $t\to\infty$ gives $\E_{(k,b)}\tau\le(k-b)/\lambda$, so $h$ is well
+defined and $h(k,b)\le\E_{(k,b)}\tau\le(k-b)/\lambda$. For strict positivity,
+with probability $(2+\lambda)^{-b}$ the first $b$ events are service times of
+$B$, after which the chain is in state $(k,0)$ with $k\ge1$ and remains there
+for an expected time of $1/(1+\lambda)$ before $\tau$ can occur. Hence
+$h(k,b)\ge(2+\lambda)^{-b}/(1+\lambda)>0$.
+
+(b) From $(1,0)$ the chain stays put until the first arrival or service time
+of $A$, at which point it moves to $(1,1)$ or $(0,0)$. So $\tau$ is exponential
+with rate $1+\lambda$ and $b=0$ throughout $[0,\tau)$.
+
+(c) Let $x=(k,b)$ with $k>b$. Then $r(x)=\ind\{b=0\}$. Conditioning on the
+first jump of $X^0$ and using the strong Markov property, together with
+$h=0$ on the diagonal, gives
+\[
+  h(x)=\frac{1}{\Lambda(x)}\Bigl(\ind\{b=0\}+\sum_{y\ne x}Q_0(x,y)\,h(y)\Bigr),
+\]
+where $Q_0$ denotes the jump rates of $X^0$ and
+$\Lambda(x)=\sum_{y\ne x}Q_0(x,y)$. Rearranging, $\cL_0h(x)=-\ind\{b=0\}=-r(x)$.
+Next let $\iota(k,b)=(b,k)$. The dynamics of $X^0$ on gap-free states are
+symmetric under exchanging the roles of the two queues, so
+$\cL_0(f\circ\iota)=(\cL_0f)\circ\iota$ for every $f$. Since $h\circ\iota=-h$
+and $r\circ\iota=-r$, for $k<b$ we obtain
+$\cL_0h(k,b)=-(\cL_0h)(b,k)=r(b,k)=-r(k,b)$. Finally, on the diagonal,
+\[
+  \cL_0h(k,k)=\tfrac{\lambda}{2}\bigl(h(k+1,k)+h(k,k+1)\bigr)
+  +\ind\{k>0\}\bigl(h(k-1,k)+h(k,k-1)\bigr)=0=-r(k,k).\qedhere
+\]
+\end{proof}
+
+We extend $h$ to gap states. For $X^0$ started from $(\gp,b)$, let $\zeta$ be
+the first time at which $X^0$ is gap-free, and define
+\begin{equation}\label{eq:hgap}
+  h(\gp,b)=\E_{(\gp,b)}\Bigl[\int_0^{\zeta}r(X^0(s))\,ds+h(X^0(\zeta))\Bigr].
+\end{equation}
+The time $\zeta$ is at most the first service time of $A$, so $\E\zeta\le1$,
+and $|h(X^0(\zeta))|\le(2+b+N(\zeta))/\lambda$ by Lemma~\ref{lem:h}(a); thus
+\eqref{eq:hgap} is well defined. Conditioning on the first jump as in the proof
+of Lemma~\ref{lem:h}(c) gives $\cL_0h(\gp,b)=-r(\gp,b)$. Therefore
+\begin{equation}\label{eq:poisson}
+  \cL_0h(x)=-r(x)\qquad\text{for all }x\in\cX .
+\end{equation}
+
+\subsection{The value of a gap}
+
+The next lemma is the heart of the argument. It says that, holding the number
+of agents in each queue fixed, it is strictly better for $A$ to hold its single
+agent in slot $1$ than in slot $0$.
+
+\begin{blem}\label{lem:gap}
+For $b\ge0$ let $\delta_b=h(\gp,b)-h(1,b)$. Then
+\[
+  0<\delta_b\le\bar\delta:=\max\{2h(2,1),\,h(2,0)\}\qquad\text{for all }b\ge0.
+\]
+Consequently $|h(x)|\le n(x)/\lambda+\bar\delta$ for all $x\in\cX$.
+\end{blem}
+
+\begin{proof}
+Fix $b$ and run two copies of the chain $X^0$ on the same realization of
+arrival times, service times and tie-breaking draws: $X$ started from
+$(\gp,b)$ and $X'$ started from $(1,b)$. We claim that there is a stopping
+time $\zeta$, equal to the first time $X$ is gap-free, such that for $t<\zeta$
+\[
+  X(t)=(\gp,\beta(t))\quad\text{and}\quad X'(t)=(1,\beta(t))
+\]
+for a common process $\beta$. Indeed, suppose the two chains are in
+$(\gp,\beta)$ and $(1,\beta)$ and consider the next event.
+\begin{itemize}
+\item \emph{Service time of $B$.} Both move to the corresponding state with
+  $(\beta-1)^+$ in place of $\beta$.
+\item \emph{Service time of $A$.} Both move to $(0,\beta)$.
+\item \emph{Arrival with $\beta\ge2$.} $X$ moves to $(2,\beta)$. In $X'$ the
+  agent joins $A$ because $1<\beta$, so $X'$ moves to $(2,\beta)$.
+\item \emph{Arrival with $\beta=1$.} $X$ moves to $(2,1)$. In $X'$ the agent is
+  indifferent: if $u=A$ then $X'$ moves to $(2,1)$, and if $u=B$ then $X'$
+  moves to $(1,2)$.
+\item \emph{Arrival with $\beta=0$.} In $X$ the agent is indifferent, and in
+  $X'$ she joins $B$. If $u=B$, the chains move to $(\gp,1)$ and $(1,1)$. If
+  $u=A$, $X$ moves to $(2,0)$ and $X'$ moves to $(1,1)$.
+\end{itemize}
+This proves the claim, with $\zeta$ the first service time of $A$ or the first
+arrival other than an arrival with $\beta=0$ and $u=B$. Moreover, at time
+$\zeta$ either $X(\zeta)=X'(\zeta)$, or
+\[
+  E_1:\ \bigl(X(\zeta),X'(\zeta)\bigr)=\bigl((2,1),(1,2)\bigr),
+  \qquad\text{or}\qquad
+  E_0:\ \bigl(X(\zeta),X'(\zeta)\bigr)=\bigl((2,0),(1,1)\bigr).
+\]
+
+On $[0,\zeta)$ the two chains have the same numbers of agents in each queue, so
+$r(X(s))=r(X'(s))$. By definition \eqref{eq:hgap},
+$h(\gp,b)=\E[\int_0^\zeta r(X(s))ds+h(X(\zeta))]$. By
+Lemma~\ref{lem:dynkin}, \eqref{eq:poisson} and optional stopping at
+$\zeta\wedge t$,
+$h(1,b)=\E[\int_0^{\zeta\wedge t}r(X'(s))ds+h(X'(\zeta\wedge t))]$; since
+$|h(X'(\zeta\wedge t))|\le(1+b+N(\zeta))/\lambda$, which is integrable,
+dominated convergence gives the same identity with $\zeta$ in place of
+$\zeta\wedge t$. Subtracting and using $h(1,2)=-h(2,1)$ and $h(1,1)=0$,
+\[
+  \delta_b=\E\bigl[h(X(\zeta))-h(X'(\zeta))\bigr]
+  =2h(2,1)\,\Pr_b(E_1)+h(2,0)\,\Pr_b(E_0).
+\]
+Both coefficients are positive by Lemma~\ref{lem:h}(a) and
+$\Pr_b(E_1)+\Pr_b(E_0)\le1$, which gives the upper bound. For positivity: if
+$b\ge1$, with positive probability the first $b-1$ events are service times of
+$B$ and the next event is an arrival with $u=B$, which is $E_1$; if $b=0$, with
+positive probability the first event is an arrival with $u=A$, which is $E_0$.
+
+The final claim follows from Lemma~\ref{lem:h}(a) for gap-free states, and from
+$|h(\gp,b)|\le|h(1,b)|+\bar\delta\le|1-b|/\lambda+\bar\delta$ for gap states.
+\end{proof}
+
+\begin{brem}
+In both events $E_0$ and $E_1$ the gap has moved one agent from $B$ to $A$
+relative to FCFS. The proof shows that this is the only effect a gap ever has,
+and Lemma~\ref{lem:h}(a) shows that such a move is always valuable.
+\end{brem}
+
+\subsection{The advantage of the deviation}
+
+For $b\ge0$ let
+\[
+  \mathrm{adv}(b)=\frac{1}{\lambda}\,(\cL_1h-\cL_0h)(0,b)
+  =\E_u\,h(\mathrm{arr}_1((0,b),u))-\E_u\,h(\mathrm{arr}_0((0,b),u)).
+\]
+
+\begin{blem}\label{lem:adv}
+$\mathrm{adv}(b)=\delta_b>0$ for $b\ge1$, and
+$\mathrm{adv}(0)=-1/(1+\lambda)$.
+\end{blem}
+
+\begin{proof}
+If $b\ge1$, then $\mathrm{arr}_1((0,b),u)=(\gp,b)$ and
+$\mathrm{arr}_0((0,b),u)=(1,b)$, so $\mathrm{adv}(b)=h(\gp,b)-h(1,b)=\delta_b$.
+If $b=0$, then $\mathrm{arr}_1((0,0),u)=(0,1)$, while
+$\mathrm{arr}_0((0,0),u)$ is $(1,0)$ or $(0,1)$ with probability $1/2$ each, so
+$\mathrm{adv}(0)=h(0,1)-\tfrac12(h(1,0)+h(0,1))=-h(1,0)$, and
+$h(1,0)=1/(1+\lambda)$ by Lemma~\ref{lem:h}(b).
+\end{proof}
+
+\begin{bprop}[Performance difference]\label{prop:pd}
+Under $\Reps$ with optimal routing, for every $T\ge0$,
+\[
+  \E\int_0^T r(X(s))\,ds
+  =-\E\,h(X(T))+\lambda\,\E\int_0^T D(s)\,\mathrm{adv}(b(s))\,ds .
+\]
+\end{bprop}
+
+\begin{proof}
+By Lemma~\ref{lem:gap}, $h$ has at most linear growth, so
+Lemma~\ref{lem:dynkin} applies to $f=h$. Since $D(s)=1$ only at states
+$(0,b)$, we have $\cL_{D(s)}h(X(s))=\cL_0h(X(s))+\lambda D(s)\,
+\mathrm{adv}(b(s))$, and $\cL_0h=-r$ by \eqref{eq:poisson}. Taking expectations
+in Lemma~\ref{lem:dynkin} and using $h(X(0))=h(0,0)=0$ gives the result.
+\end{proof}
+
+Since $\mathrm{adv}(b)\ge0$ for $b\ge1$, Proposition~\ref{prop:pd} and
+Lemma~\ref{lem:adv} give
+\begin{equation}\label{eq:pdbound}
+\begin{aligned}
+  \E\int_0^T r(X(s))\,ds\ \ge\ {}&-\E|h(X(T))|
+  +\lambda\,\delta_2\,\E\int_0^T D(s)\ind\{b(s)=2\}\,ds\\
+  &-\frac{\lambda}{1+\lambda}\,\E\int_0^T D(s)\ind\{b(s)=0\}\,ds .
+\end{aligned}
+\end{equation}
+It remains to show that $A$ is armed with $b=2$ much more often than it is
+armed with $b=0$.
+
+\subsection{Stability}
+
+Let $V(x)=a(x)^2+b(x)^2$, and set $\theta=2-\lambda>0$ and $K=3\lambda+2$.
+
+\begin{blem}\label{lem:drift}
+For every $x\in\cX$ and every $d$ for which $\cL_d$ is defined at $x$,
+\[
+  \cL_dV(x)\le K-\theta\,n(x).
+\]
+Consequently, under $\Reps$ with optimal routing and for every $T>0$,
+\[
+  \E\,V(X(T))\le KT,\qquad \int_0^T\E\,n(X(s))\,ds\le\frac{KT}{\theta},
+  \qquad \E\,n(X(T))\le\sqrt{2KT}.
+\]
+\end{blem}
+
+\begin{proof}
+A service time of $A$ changes $V$ by $-2a+1$ if $a>0$ and by $0$ otherwise, and
+similarly for $B$; the two service terms sum to at most $-2n+2$. An arrival
+that joins $A$ changes $V$ by $2a+1$, and one that joins $B$ by $2b+1$. We
+check that the queue joined always holds at most $\min\{a,b\}+1$ agents. At
+$(k,b)$ with $d=0$ the agent joins a queue of size $\min\{k,b\}$. At $(\gp,b)$
+with $b\ge1$ she joins $A$, which has size $1=\min\{1,b\}$; at $(\gp,0)$ she
+joins a queue of size at most $1=\min\{1,0\}+1$. At $(0,b)$ with $d=1$ she
+joins $A$, of size $0$, if $b\ge1$, and $B$, of size $0$, if $b=0$. Hence the
+arrival term is at most $\lambda(2\min\{a,b\}+3)\le\lambda(n+3)$, and
+$\cL_dV\le\lambda(n+3)-2n+2=K-\theta n$.
+
+Lemma~\ref{lem:dynkin} with $f=V$ and $X(0)=(0,0)$ gives
+$0\le\E V(X(T))\le KT-\theta\int_0^T\E n(X(s))ds$, which yields the first two
+bounds. The third follows from $n^2\le2V$ and Jensen's inequality.
+\end{proof}
+
+Let $\mathcal{R}$ denote the set of configurations in which both queues are
+empty and $A$ is not armed.
+
+\begin{blem}[Regeneration]\label{lem:regen}
+Let $\varepsilon\in(0,1]$. Under $\Reps$ with optimal routing, the successive
+entrance times $0=T_0<T_1<T_2<\cdots$ into $\mathcal{R}$ are almost surely
+finite, the cycles of the process $(X,D,N_A,N_B)$ between them are i.i.d., and
+$\E[T_1]<\infty$.
+\end{blem}
+
+\begin{proof}
+\emph{Regeneration.} Suppose both queues are empty and $A$ is not armed at a
+stopping time $T$. Until the next join to $A$, the quantities $j$ and $\ell$
+do not change and $t-\ell(t)$ increases, so $A$ remains not armed; after the
+next join, $D$ is determined by events after $T$. Hence the evolution of
+$(X,D)$ after $T$ is the same measurable function of the arrival times, service
+times and tie-breaking draws after $T$ as the evolution from time $0$ is of
+those after $0$. By the strong Markov property of the Poisson processes, the
+process after $T$ is independent of $\cF_T$ and has the same law as the
+original process.
+
+\emph{Finite mean.} Let $M=(K+1)/\theta$, $F=\{x\in\cX:n(x)<M\}$ and
+$m_1=\lceil M\rceil$. By Lemma~\ref{lem:drift}, $\cL_dV\le-1$ outside $F$.
+Starting from an arbitrary configuration with $X=x$ at a stopping time $\rho$,
+let $\sigma=\inf\{t\ge\rho:X(t)\in F\}$. Lemma~\ref{lem:dynkin} applied to $V$
+and optional stopping at $\sigma\wedge t$ give
+$\E[\sigma\wedge t-\rho\mid\cF_\rho]\le V(x)$, hence
+\begin{equation}\label{eq:hitF}
+  \E[\sigma-\rho\mid\cF_\rho]\le V(X(\rho)).
+\end{equation}
+Next, consider the event $H$ that on $(\sigma,\sigma+1]$ there are no
+arrivals, at least $m_1$ service times of $A$ and at least $m_1$ service times
+of $B$. On $H$ both queues are empty at time $\sigma+1$, and since no agent has
+joined $A$ during $(\sigma,\sigma+1]$ and $\varepsilon\le1$, $A$ is not armed
+at $\sigma+1$. So the configuration at $\sigma+1$ lies in $\mathcal{R}$. Also
+\begin{align*}
+  \Pr(H\mid\cF_\sigma)&=p_0:=e^{-\lambda}\,\Pr(\Poi(1)\ge m_1)^2>0,\\
+  \E\bigl[V(X(\sigma+1))\mid\cF_\sigma\bigr]&\le c_1:=\E\bigl[(m_1+\Poi(\lambda))^2\bigr],
+\end{align*}
+because $V\le n^2$ and $n(X(\sigma+1))\le n(X(\sigma))+N(\sigma,\sigma+1]$.
+
+Now define rounds: $\rho_1=0$, and for $i\ge1$ let
+$\sigma_i=\inf\{t\ge\rho_i:X(t)\in F\}$, let $H_i$ be the event $H$ for
+$\sigma=\sigma_i$, and let $\rho_{i+1}=\sigma_i+1$. Let
+$I=\min\{i:H_i\text{ occurs}\}$. The configuration lies in $\mathcal{R}$ at
+time $\rho_{I+1}$. The event $\{I\ge i\}$ belongs to $\cF_{\rho_i}$, and
+$\Pr(I\ge i)\le(1-p_0)^{i-1}$. By \eqref{eq:hitF},
+\[
+  \E[\rho_{I+1}]=\sum_{i\ge1}\E\bigl[(\rho_{i+1}-\rho_i)\ind\{I\ge i\}\bigr]
+  \le\sum_{i\ge1}\E\bigl[(V(X(\rho_i))+1)\ind\{I\ge i\}\bigr].
+\]
+For $i\ge2$, since $\{I\ge i\}\subseteq\{I\ge i-1\}\in\cF_{\sigma_{i-1}}$,
+\[
+  \E\bigl[V(X(\rho_i))\ind\{I\ge i\}\bigr]
+  \le\E\bigl[\ind\{I\ge i-1\}\,\E[V(X(\rho_i))\mid\cF_{\sigma_{i-1}}]\bigr]
+  \le c_1(1-p_0)^{i-2}.
+\]
+Hence $\E[\rho_{I+1}]\le V(X(0))+(1+c_1)/p_0<\infty$ from any initial
+configuration, and in particular from the configuration reached at the first
+arrival after time $0$. Since the process leaves $\mathcal{R}$ at that arrival
+and $T_1$ is at most the first subsequent time at which the configuration lies
+in $\mathcal{R}$, we get $\E[T_1]\le1/\lambda+1+(1+c_1)/p_0<\infty$.
+\end{proof}
+
+\subsection{How often the rule is armed}
+
+Call a join to $A$ a \emph{slot-$2$ join} if the agent is placed in slot $2$.
+By Lemma~\ref{lem:states} this happens exactly when the state immediately
+before is $(2,b)$, and by Lemma~\ref{lem:routing}(i) it requires $b\ge2$.
+
+\begin{blem}[Armed against an empty $B$]\label{lem:bad}
+For every $\varepsilon\in(0,1]$ and $T\ge0$,
+\[
+  \E\int_0^T D(s)\ind\{b(s)=0\}\,ds\le\frac{\lambda\,\varepsilon^{6}}{12}\,T .
+\]
+\end{blem}
+
+\begin{proof}
+Let $\vartheta_1<\vartheta_2<\cdots$ be the times of slot-$2$ joins. Suppose
+$D(s)=1$ and $b(s)=0$, and let $\vartheta=\ell(s)$. Then $\vartheta$ is a
+slot-$2$ join with $\vartheta<s<\vartheta+\varepsilon$. Immediately after
+$\vartheta$, queue $A$ holds three agents and queue $B$ holds at least two.
+Between $\vartheta$ and $s$ no agent joins $A$ and $A$ becomes empty, so there
+are at least three service times of $A$ in $(\vartheta,s]$; and $b$ falls from
+at least $2$ to $0$, so there are at least two service times of $B$ in
+$(\vartheta,s]$. Therefore
+\[
+  \int_0^T D(s)\ind\{b(s)=0\}\,ds\le\varepsilon\sum_{i:\vartheta_i\le T}
+  \ind\{\SvA(I_i)\ge3\}\,\ind\{\SvB(I_i)\ge2\},
+  \qquad I_i=(\vartheta_i,\vartheta_i+\varepsilon].
+\]
+Each $\vartheta_i$ is a stopping time, so the two indicators are independent
+of $\cF_{\vartheta_i}$ and of each other, with probabilities
+$\Pr(\Poi(\varepsilon)\ge3)\le\varepsilon^3/6$ and
+$\Pr(\Poi(\varepsilon)\ge2)\le\varepsilon^2/2$. The number of slot-$2$ joins up
+to $T$ is at most $N(T)$, which has mean $\lambda T$. Taking expectations
+gives the bound.
+\end{proof}
+
+\begin{blem}[Occupation of $(2,2)$]\label{lem:occupation}
+Let $m_0=\lceil2K/\theta\rceil$ and
+\[
+  q=e^{-\lambda}\,\Pr(\Poi(1)\ge m_0)^2\cdot
+  e^{-\lambda/2}\frac{(\lambda/2)^4}{4!}\cdot e^{-2}\cdot\frac14\cdot
+  e^{-\lambda/2}>0 .
+\]
+For every $\varepsilon\in(0,1]$ and $T\ge2$, under $\Reps$ with optimal routing,
+\[
+  \int_0^T\Pr\bigl(X(s)=(2,2)\bigr)\,ds\ge\frac{q}{2}\,(T-2).
+\]
+\end{blem}
+
+\begin{proof}
+By Lemma~\ref{lem:drift} and Markov's inequality,
+$\int_0^{T'}\Pr(n(X(s))\ge m_0)\,ds\le\frac{\theta}{2K}\cdot\frac{KT'}{\theta}
+=T'/2$, so
+\begin{equation}\label{eq:small}
+  \int_0^{T'}\Pr\bigl(n(X(s))<m_0\bigr)\,ds\ge\frac{T'}{2}
+  \qquad\text{for all }T'\ge0 .
+\end{equation}
+Fix $s\ge0$ and let $G_s$ be the event that all of the following hold:
+\begin{enumerate}
+\item on $(s,s+1]$ there are no arrivals, at least $m_0$ service times of $A$
+  and at least $m_0$ service times of $B$;
+\item on $(s+1,s+\tfrac32]$ there are exactly four arrivals, and the first and
+  third of them have tie-breaking draw $A$;
+\item on $(s+\tfrac32,s+2]$ there are no arrivals;
+\item on $(s+1,s+2]$ there are no service times at either queue.
+\end{enumerate}
+Then $G_s$ is independent of $\cF_s$ and $\Pr(G_s)=q$. On
+$G_s\cap\{n(X(s))<m_0\}$, both queues are empty at time $s+1$, and $A$ is not
+armed at $s+1$ because no agent has joined $A$ for at least one unit of time
+and $\varepsilon\le1$. The four arrivals then find, in order: state $(0,0)$,
+where the agent is indifferent and joins $A$; state $(1,0)$, where the agent
+joins $B$; state $(1,1)$, where the agent is indifferent and joins $A$; and
+state $(2,1)$, where the agent joins $B$. Queue $A$ is not armed at any of
+these arrivals, since it is either non-empty or its last join was not a
+slot-$2$ join. Hence $X(u)=(2,2)$ for all $u\in[s+\tfrac32,s+2]$, and in
+particular $\Pr(X(s+2)=(2,2))\ge q\,\Pr(n(X(s))<m_0)$. Integrating over
+$s\in[0,T-2]$ and using \eqref{eq:small} gives the claim.
+\end{proof}
+
+\begin{blem}[Armed against $b=2$]\label{lem:good}
+For every $\varepsilon\in(0,1]$ and $T\ge3$,
+\[
+  \E\int_0^T D(s)\ind\{b(s)=2\}\,ds\ge
+  \frac{\lambda\,q\,\varepsilon^{4}}{384\,e^{4}}\,(T-3).
+\]
+\end{blem}
+
+\begin{proof}
+Let $\vartheta'_1<\vartheta'_2<\cdots$ be the times of slot-$2$ joins that
+occur from state $(2,2)$; these are the arrivals that find state $(2,2)$ and
+have tie-breaking draw $A$. For each $i$ let $G'_i$ be the event that
+\[
+  \SvA(\vartheta'_i,\vartheta'_i+\tfrac{\varepsilon}{2}]\ge3,\qquad
+  N(\vartheta'_i,\vartheta'_i+\varepsilon]=0,\qquad
+  \SvB(\vartheta'_i,\vartheta'_i+\varepsilon]=0 .
+\]
+Immediately after $\vartheta'_i$ the state is $(3,2)$. On $G'_i$, queue $A$ is
+empty from some time before $\vartheta'_i+\varepsilon/2$ until
+$\vartheta'_i+\varepsilon$, its last join is the slot-$2$ join at
+$\vartheta'_i$, and $b=2$ throughout. Hence $D(s)=1$ and $b(s)=2$ for all
+$s\in[\vartheta'_i+\varepsilon/2,\vartheta'_i+\varepsilon)$. On $G'_i$ there is
+no arrival in $(\vartheta'_i,\vartheta'_i+\varepsilon]$, so these intervals are
+disjoint for different $i$, and
+\[
+  \int_0^T D(s)\ind\{b(s)=2\}\,ds\ge\frac{\varepsilon}{2}
+  \sum_{i:\vartheta'_i\le T-\varepsilon}\ind_{G'_i}.
+\]
+The event $G'_i$ is independent of $\cF_{\vartheta'_i}$, and since
+$\varepsilon\le1$ and $\lambda<2$,
+\[
+  \Pr(G'_i)=\Pr\bigl(\Poi(\tfrac{\varepsilon}{2})\ge3\bigr)e^{-(\lambda+1)\varepsilon}
+  \ge e^{-\varepsilon/2}\frac{(\varepsilon/2)^3}{6}\,e^{-(\lambda+1)\varepsilon}
+  \ge\frac{\varepsilon^{3}}{48\,e^{4}} .
+\]
+By the compensation formula, the expected number of $\vartheta'_i$ in
+$[0,T-\varepsilon]$ equals
+$\frac{\lambda}{2}\int_0^{T-\varepsilon}\Pr(X(s)=(2,2))\,ds$, which by
+Lemma~\ref{lem:occupation} is at least $\frac{\lambda q}{4}(T-3)$. Combining,
+\[
+  \E\int_0^T D(s)\ind\{b(s)=2\}\,ds\ge\frac{\varepsilon}{2}\cdot
+  \frac{\varepsilon^{3}}{48\,e^{4}}\cdot\frac{\lambda q}{4}\,(T-3).\qedhere
+\]
+\end{proof}
+
+\subsection{Proof of Theorem~\ref{thm:blind}}
+
+Let $\varepsilon\in(0,1]$. Combining \eqref{eq:pdbound} with
+Lemmas~\ref{lem:bad} and~\ref{lem:good}, for $T\ge3$,
+\[
+  \E\int_0^T r(X(s))\,ds\ \ge\ -\E|h(X(T))|
+  +\lambda^{2}\varepsilon^{4}\Bigl(\frac{\delta_2\,q}{384\,e^{4}}\,(T-3)
+  -\frac{\varepsilon^{2}}{12(1+\lambda)}\,T\Bigr).
+\]
+By Lemmas~\ref{lem:gap} and~\ref{lem:drift},
+$\E|h(X(T))|\le\sqrt{2KT}/\lambda+\bar\delta$ and
+$\E|a(X(T))-b(X(T))|\le\sqrt{2KT}$. Lemma~\ref{lem:busy} therefore gives
+\begin{equation}\label{eq:liminf}
+  \liminf_{T\to\infty}\frac{1}{T}\,\E\bigl[N_A(T)-N_B(T)\bigr]\ \ge\
+  \lambda^{2}\varepsilon^{4}\Bigl(\kappa-\frac{\varepsilon^{2}}{12(1+\lambda)}\Bigr),
+  \qquad\kappa=\frac{\delta_2\,q}{384\,e^{4}} .
+\end{equation}
+
+By Lemma~\ref{lem:regen}, $(N_A,N_B)$ is a cumulative process with respect to
+the renewal sequence $(T_m)$, with $\E[T_1]<\infty$ and
+$N_A(T_1)+N_B(T_1)=N(T_1)$, which has mean $\lambda\,\E[T_1]<\infty$. By the
+renewal reward theorem (see, e.g., Asmussen, 2003, Chapter~VI),
+\[
+  \frac{N_q(t)}{t}\to\alpha_q:=\frac{\E[N_q(T_1)]}{\E[T_1]}
+  \quad\text{almost surely, and}\quad
+  \frac{\E[N_q(t)]}{t}\to\alpha_q,\qquad q\in\{A,B\}.
+\]
+Since $N_A(t)+N_B(t)=N(t)$, we have $\alpha_A+\alpha_B=\lambda$, and by
+\eqref{eq:liminf},
+\[
+  \alpha_A-\alpha_B\ \ge\ \lambda^{2}\varepsilon^{4}
+  \Bigl(\kappa-\frac{\varepsilon^{2}}{12(1+\lambda)}\Bigr).
+\]
+Hence
+$\alpha_A\ge\frac{\lambda}{2}+\frac{\lambda^{2}\varepsilon^{4}}{2}
+\bigl(\kappa-\frac{\varepsilon^{2}}{12(1+\lambda)}\bigr)$, which exceeds
+$\lambda/2$ whenever
+$\varepsilon<\bar\varepsilon=\min\{1,\sqrt{12(1+\lambda)\kappa}\}$. \qed
+
+\subsection{Remarks}
+
+\begin{brem}[Magnitude]
+The bound in Theorem~\ref{thm:blind} is of order $\varepsilon^{4}$ and the
+theorem makes no attempt to optimize it. Solving for the stationary
+distribution numerically, in a variant of $\Reps$ in which the window of
+length $\varepsilon$ is replaced by an independent exponential timer with mean
+$\varepsilon$, gives a gain in $A$'s share of about $3\times10^{-7}$ at
+$\lambda=1$ and $\varepsilon=1/5$, falling by a factor of about $16$ each time
+$\varepsilon$ is halved, in line with the $\varepsilon^{4}$ rate. For
+$\varepsilon\ge1$ the same variant loses share, so the requirement that
+$\varepsilon$ be small is not an artifact of the proof.
+\end{brem}
+
+\begin{brem}[What the rule uses]
+The rule $\Reps$ depends on the clock and is therefore not state-based in the
+sense of Section~3, and it relies on preemption: the agent placed in slot $1$
+of an empty queue is displaced by a later arrival placed in slot $0$. The
+short window is what converts the first inference ($b\ge2$ at the slot-$2$
+join) into near-certainty at the time of the deviation. The performance
+difference identity in Proposition~\ref{prop:pd} holds for any blind rule that
+deviates from FCFS placement only by offering slot $1$ when empty, with
+$\E[D(s)\,\mathrm{adv}(b(s))]$ computed under that rule. A blind rule that
+ignores the clock, or one with a non-negligible advantage, would deviate
+whenever the posterior probability of $\{b=0\}$ given $A$'s own history is
+small relative to the posterior mean of $\delta_b$; we do not pursue this here.
+\end{brem}
+
+\begin{brem}[Relation to the proof of Theorem~2]
+The proof of Theorem~2 establishes pathwise dominance of the Ledger rule over
+FCFS. That argument is not available here: when the deviation is made against
+an empty queue $B$, the rule $\Reps$ loses an arrival that FCFS would have
+attracted with probability $1/2$. The argument above instead compares the two
+rules in expectation, through the value function $h$ of FCFS.
+\end{brem}
+
+\begin{thebibliography}{9}
+\bibitem{asmussen} Asmussen, S. (2003). \emph{Applied Probability and Queues},
+  2nd ed. Springer.
+\bibitem{bremaud} Br\'emaud, P. (1981). \emph{Point Processes and Queues:
+  Martingale Dynamics}. Springer.
+\end{thebibliography}
+% ============================= END APPENDIX BODY =============================
+
+\end{document}
